@@ -55,7 +55,7 @@ export default defineComponent({
         <router-link :to="ROUTE_PATHS.NONE">
             <div class="side_option">
                 <div class="side_option_icon">
-                    <img src="/favicon.ico" />
+                    <img src="./favicon.ico" />
                 </div>
             </div>
         </router-link>

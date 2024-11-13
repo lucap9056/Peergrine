@@ -21,7 +21,7 @@ export default class Signaling {
     private auth: Authorization;
 
     // URL constants
-    private static readonly API_BASE_URL = "/api/signal/";
+    private static readonly API_BASE_URL = "./api/signal/";
     private static readonly SIGNAL_URL = `${Signaling.API_BASE_URL}`;
     private static readonly SIGNAL_WITH_LINKCODE_URL = `${Signaling.API_BASE_URL}`;
 

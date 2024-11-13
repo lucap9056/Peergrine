@@ -35,7 +35,7 @@ export default class MessageBridgeApi extends BaseEventSystem<EventDefinitions> 
     public static HASH_NAME = "SHA-256";
 
     // Constant URLs
-    private static API_BASE_URL = "/api/message";
+    private static API_BASE_URL = "./api/message";
     private static MESSAGES_URL = `${MessageBridgeApi.API_BASE_URL}/messages`;
     private static SESSION_URL = `${MessageBridgeApi.API_BASE_URL}/session`;
 

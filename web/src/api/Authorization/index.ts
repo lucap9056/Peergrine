@@ -25,8 +25,8 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
 
     private jwtInstance?: JWT;
 
-    private static readonly WS_URL = "/api/token/initialize";
-    private static readonly REFRESH_URL = "/api/token/refresh";
+    private static readonly WS_URL = "./api/token/initialize";
+    private static readonly REFRESH_URL = "./api/token/refresh";
 
     constructor() {
         super();
