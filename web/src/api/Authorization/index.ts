@@ -40,6 +40,12 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
         wss.addEventListener("close", () => this.WebSocketCloseHandler());
         wss.addEventListener("error", () => this.WebSocketErrorHandler());
         wss.addEventListener("message", (e) => this.WebSocketMessageHandler(e));
+
+        setInterval(() => {
+            if (wss.OPEN) {
+                wss.send("PING")
+            }
+        }, 60 * 1000);
     }
 
     private WebSocketOpenHandler() {
