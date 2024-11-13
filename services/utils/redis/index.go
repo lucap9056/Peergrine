@@ -24,10 +24,7 @@ func New(addr string) (*Manager, error) {
 		}),
 	}
 
-	isCluster, err := m.isClusterNode()
-	if err != nil {
-		return nil, err
-	}
+	isCluster := m.isClusterNode()
 
 	if isCluster {
 		clusterAddrs, err := m.getClusterNodes()
@@ -47,16 +44,17 @@ func New(addr string) (*Manager, error) {
 	return m, nil
 }
 
-func (r *Manager) isClusterNode() (bool, error) {
+func (r *Manager) isClusterNode() bool {
 
 	info, err := r.client.ClusterInfo(r.ctx).Result()
 	if err != nil {
-		return false, err
+		log.Printf("Error fetching cluster info: %v", err)
+		return false
 	}
 	log.Printf("Redis info: \n%s\n", info)
 	stateOk := strings.Contains(info, "cluster_state:ok")
 	clusterEnabled := strings.Contains(info, "cluster_enabled:1")
-	return stateOk || clusterEnabled, nil
+	return stateOk || clusterEnabled
 }
 
 func (r *Manager) getClusterNodes() ([]string, error) {
