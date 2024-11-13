@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy-config
+data:
+  Caddyfile: |
+    http://localhost {
+        
+        handle_path /api/token/* {
+            rewrite /api/token/* /{http.regexp.token.1}
+            reverse_proxy jwtissuer
+        }
+
+        handle_path /api/signal/* {
+            rewrite /api/signal/* /{http.regexp.token.1}
+            reverse_proxy rtc-bridge
+            
+        }
+
+        handle_path /api/message/* {
+            rewrite /api/message/* /{http.regexp.token.1}
+            reverse_proxy msg-bridge
+            
+        }
+    }
+
+
+---
+  
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caddy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: caddy
+  template:
+    metadata:
+      labels:
+        app: caddy
+    spec:
+      containers:
+      - name: caddy
+        image: caddy
+        ports:
+        - name: http
+          containerPort: 80
+        volumeMounts:
+        - name: caddy-config
+          mountPath: /etc/caddy/Caddyfile
+          subPath: Caddyfile
+      volumes:
+      - name: caddy-config
+        configMap:
+          name: caddy-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  selector:
+    app: caddy

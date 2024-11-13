@@ -23,9 +23,9 @@ services:
     networks:
       - centralized_peergrine_network
 
-  nginx:
-    container_name: centralized_peergrine_nginx
-    image: nginx
+  caddy:
+    container_name: centralized_peergrine_caddy
+    image: caddy
     ports:
       - "80:80"
     depends_on:
@@ -33,7 +33,7 @@ services:
       - rtc-bridge
       - msg-bridge
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
       - centralized_peergrine_network
 
