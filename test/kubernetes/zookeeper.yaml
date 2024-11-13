@@ -1,0 +1,60 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    app: zookeeper
+spec:
+  ports:
+    - port: 2181
+  selector:
+    app: zookeeper
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  serviceName: zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: zookeeper:3.8
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ZOO_DATA_DIR
+              value: /data
+            - name: ZOO_LOG_DIR
+              value: /datalog
+          volumeMounts:
+            - name: zookeeper-data
+              mountPath: /data
+            - name: zookeeper-datalog
+              mountPath: /datalog
+  volumeClaimTemplates:
+    - metadata:
+        name: zookeeper-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: zookeeper-datalog
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

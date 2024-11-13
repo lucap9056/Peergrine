@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package servicekafker;
+
+option go_package = "/servicekafker";
+
+service Kafker {
+  rpc RequestKafkaPartition (RequestKafkaPartitionReq) returns (RequestKafkaPartitionRes);
+  rpc ReleaseKafkaPartition (ReleaseKafkaPartitionReq) returns (ReleaseKafkaPartitionRes);
+}
+
+message RequestKafkaPartitionReq {
+  string service_name = 1;
+  string service_id = 2;
+  string topic_name = 3;
+}
+
+message RequestKafkaPartitionRes {
+  int32 partition_id = 1;
+}
+
+message ReleaseKafkaPartitionReq {
+  string service_id = 1;
+}
+
+message ReleaseKafkaPartitionRes {
+  string message = 1;
+}

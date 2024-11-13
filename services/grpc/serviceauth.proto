@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package serviceauth;
+
+option go_package = "/serviceauth";
+
+service serviceauth {
+  rpc VerifyAccessToken (AccessTokenRequest) returns (TokenResponse);
+}
+
+message AccessTokenRequest {
+  string access_token = 1;
+}
+
+message TokenResponse {
+  string iss = 1;
+  int64 iat = 2;
+  int64 exp = 3;
+  string user_id = 4;
+}

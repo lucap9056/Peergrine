@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: msg-bridge
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: msg-bridge
+  template:
+    metadata:
+      labels:
+        app: msg-bridge
+    spec:
+      containers:
+      - name: msg-bridge
+        image: lucap9056/peergrine_msg-bridge:latest
+        ports:
+        - containerPort: 80
+          name: client-http
+        env:
+        - name: APP_ZOOKEEPER_ADDRS
+          value: zookeeper:2181
+        - name: APP_REDIS_ADDR
+          value: redis:6379
+        - name: APP_KAFKER_ADDR
+          value: kafker:50051
+        - name: APP_KAFKA_ADDR
+          value: kafka:9093,kafka:9093,kafka:9093
+        - name: APP_CONSUL_ADDR
+          value: consul:8500
+        - name: APP_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: APP_SERVICE_ADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: msg-bridge
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: msg-bridge

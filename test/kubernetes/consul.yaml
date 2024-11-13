@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: consul
+spec:
+  serviceName: "consul"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: consul
+  template:
+    metadata:
+      labels:
+        app: consul
+    spec:
+      containers:
+      - name: consul
+        image: consul:1.15.4
+        ports:
+        - containerPort: 8500
+        - containerPort: 8301
+        - containerPort: 8302
+        - containerPort: 8300
+        args:
+        - "agent"
+        - "-server"
+        - "-bootstrap-expect=3"
+        - "-client=0.0.0.0"
+        - "-ui"
+        - "-bind=0.0.0.0"
+        - "-data-dir=/consul/data"
+        - "-retry-join=consul-0.consul"
+        - "-retry-join=consul-1.consul"
+        - "-retry-join=consul-2.consul"
+        volumeMounts:
+        - name: consul-data
+          mountPath: /consul/data
+      volumes:
+      - name: consul-data
+        emptyDir: {}
+        
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  labels:
+    app: consul
+spec:
+  ports:
+    - port: 8500
+  selector:
+    app: consul

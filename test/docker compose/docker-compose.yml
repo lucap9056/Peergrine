@@ -1,0 +1,42 @@
+services:
+  jwtissuer:
+    container_name: centralized_peergrine_jwtissuer
+    image: lucap9056/peergrine_jwtissuer:latest
+    networks:
+      - centralized_peergrine_network
+
+  rtc-bridge:
+    container_name: centralized_peergrine_rtc-bridge
+    image: lucap9056/peergrine_rtc-bridge:latest
+    depends_on:
+      - jwtissuer
+    environment:
+      - APP_AUTH_ADDR=jwtissuer:50051
+    networks:
+      - centralized_peergrine_network
+
+  msg-bridge:
+    container_name: centralized_peergrine_msg-bridge
+    image: lucap9056/peergrine_msg-bridge:latest
+    environment:
+      - APP_AUTH_ADDR=jwtissuer:50051
+    networks:
+      - centralized_peergrine_network
+
+  nginx:
+    container_name: centralized_peergrine_nginx
+    image: nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - jwtissuer
+      - rtc-bridge
+      - msg-bridge
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - centralized_peergrine_network
+
+networks:
+  centralized_peergrine_network:
+    name: centralized_peergrine_network
