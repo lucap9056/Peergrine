@@ -90,8 +90,7 @@ func (app *API) setSignal(c *gin.Context) {
 	clientSignal := Storage.NewSignal(clientId, linkCode, signalBytes, expiresAt)
 
 	if err := app.storage.SetSignal(clientSignal); err != nil {
-
-		Error(c, http.StatusInternalServerError, fmt.Sprintf("failed to storage client signal: %v", err))
+		Error(c, http.StatusInternalServerError, fmt.Sprintf("failed to store client signal: %v", err))
 		return
 	}
 
@@ -99,7 +98,15 @@ func (app *API) setSignal(c *gin.Context) {
 		LinkCode:  linkCode,
 		ExpiresAt: expiresAt,
 	}
-	c.JSON(http.StatusOK, result)
+
+	resultBytes, _ := json.Marshal(result)
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Transfer-Encoding", "chunked")
+	c.Status(http.StatusOK)
+	c.Writer.Write(resultBytes)
 	c.Writer.Flush()
 
 	awaitSignal := app.signalChannels.Add(linkCode)
@@ -111,7 +118,9 @@ func (app *API) setSignal(c *gin.Context) {
 	select {
 	case targetSignal, ok := <-awaitSignal:
 		if ok {
-			c.JSON(http.StatusOK, targetSignal)
+			targetSignalBytes, _ := json.Marshal(targetSignal)
+			c.Writer.Write(targetSignalBytes)
+			c.Writer.Flush()
 		}
 	case <-ctx.Done():
 		Error(c, http.StatusRequestTimeout, "Request timed out")
