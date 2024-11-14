@@ -11,7 +11,16 @@ Peergrine是一款類似主流通訊軟體的即時通訊應用，允許用戶�
 ### 開發背景
 
 Peergrine的開發起源於一個需求——在兩台不熟悉的裝置間快速、安全地傳送資料，且不需進行任何額外的軟體安裝。這使得它成為了移動或臨時設備間的簡便資料傳送工具。
-### 必要的第三方軟體
+
+### 系統組件
+[JWTIssuer](./services/jwtissuer/README.md) 
+
+[Kafker](./services/kafker/README.md) 
+
+[RtcBridge](./services/rtc-bridge/README.md) 
+
+[MsgBridge](./services/msg-bridge/README.md) 
+### 第三方依賴
 
 - **集中式：** 無
 - **分散式：**
