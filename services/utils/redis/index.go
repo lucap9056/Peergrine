@@ -15,6 +15,11 @@ type Manager struct {
 	clusterClient *redis.ClusterClient
 }
 
+func Test(client *redis.Client) *Manager {
+	ctx := context.Background()
+	return &Manager{ctx, client, nil}
+}
+
 func New(addr string) (*Manager, error) {
 
 	m := &Manager{
@@ -58,6 +63,7 @@ func (r *Manager) isClusterNode() bool {
 }
 
 func (r *Manager) getClusterNodes() ([]string, error) {
+
 	result, err := r.client.ClusterNodes(r.ctx).Result()
 	if err != nil {
 		return nil, err
@@ -83,11 +89,8 @@ func (r *Manager) getClusterNodes() ([]string, error) {
 	return clusterAddrs, nil
 }
 
-func Test(ctx context.Context, client *redis.Client) *Manager {
-	return &Manager{ctx, client, nil}
-}
-
 func (r *Manager) Get(key string) ([]byte, error) {
+
 	if r.clusterClient != nil {
 		return r.clusterClient.Get(r.ctx, key).Bytes()
 	}
@@ -95,7 +98,26 @@ func (r *Manager) Get(key string) ([]byte, error) {
 	return r.client.Get(r.ctx, key).Bytes()
 }
 
+func (r *Manager) Scan(cursor uint64, match string, count int64) ([]string, uint64, error) {
+
+	if r.clusterClient != nil {
+		return r.clusterClient.Scan(r.ctx, cursor, match, count).Result()
+	}
+
+	return r.client.Scan(r.ctx, cursor, match, count).Result()
+}
+
+func (r *Manager) MGet(keys []string) ([]interface{}, error) {
+
+	if r.clusterClient != nil {
+		return r.clusterClient.MGet(r.ctx, keys...).Result()
+	}
+
+	return r.client.MGet(r.ctx, keys...).Result()
+}
+
 func (r *Manager) Set(key string, data []byte, expiration time.Duration) error {
+
 	if r.clusterClient != nil {
 		return r.clusterClient.Set(r.ctx, key, data, expiration).Err()
 	}
@@ -104,6 +126,7 @@ func (r *Manager) Set(key string, data []byte, expiration time.Duration) error {
 }
 
 func (r *Manager) Exists(key string) (bool, error) {
+
 	if r.clusterClient != nil {
 		exists, err := r.clusterClient.Exists(r.ctx, key).Result()
 		if err != nil {
@@ -120,6 +143,7 @@ func (r *Manager) Exists(key string) (bool, error) {
 }
 
 func (r *Manager) Del(key string) error {
+
 	if r.clusterClient != nil {
 		return r.clusterClient.Del(r.ctx, key).Err()
 	}
@@ -128,6 +152,7 @@ func (r *Manager) Del(key string) error {
 }
 
 func (r *Manager) Close() error {
+
 	if r.clusterClient != nil {
 		r.clusterClient.Close()
 	}
