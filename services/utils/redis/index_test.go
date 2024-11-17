@@ -1,79 +1,108 @@
-package redis
+package redis_test
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	"peergrine/utils/redis"
 
 	"github.com/go-redis/redismock/v8"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNew(t *testing.T) {
-	addr := "127.0.0.1:6379"
-	manager, err := New(addr)
+func TestManager_Get(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ExpectGet("key1").SetVal("value1")
+
+	val, err := manager.Get("key1")
 	assert.NoError(t, err)
-	assert.NotNil(t, manager)
-	assert.Equal(t, addr, manager.client.Options().Addr)
-}
+	assert.Equal(t, "value1", string(val))
 
-func TestGet(t *testing.T) {
-	db, mock := redismock.NewClientMock()
-	manager := Test(context.Background(), db)
-
-	key := "testkey"
-	expectedValue := []byte("testvalue")
-
-	mock.ExpectGet(key).SetVal(string(expectedValue))
-
-	value, err := manager.Get(key)
-	assert.NoError(t, err)
-	assert.Equal(t, expectedValue, value)
-}
-
-func TestSet(t *testing.T) {
-	db, mock := redismock.NewClientMock()
-	manager := Test(context.Background(), db)
-
-	key := "testkey"
-	value := []byte("testvalue")
-	expiration := time.Minute
-
-	mock.ExpectSet(key, value, expiration).SetVal("OK")
-
-	err := manager.Set(key, value, expiration)
+	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
 
-func TestExist(t *testing.T) {
-	db, mock := redismock.NewClientMock()
-	manager := Test(context.Background(), db)
+func TestManager_Set(t *testing.T) {
+	client, mock := redismock.NewClientMock()
 
-	key := "testkey"
+	manager := redis.Test(client)
+	value := []byte("value1")
+	mock.ExpectSet("key1", value, time.Minute).SetVal("OK")
 
-	mock.ExpectExists(key).SetVal(1)
+	err := manager.Set("key1", value, time.Minute)
+	assert.NoError(t, err)
 
-	exists, err := manager.Exists(key)
+	err = mock.ExpectationsWereMet()
+	assert.NoError(t, err)
+}
+
+func TestManager_Exists(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ExpectExists("key1").SetVal(1)
+
+	exists, err := manager.Exists("key1")
 	assert.NoError(t, err)
 	assert.True(t, exists)
-}
 
-func TestDel(t *testing.T) {
-	db, mock := redismock.NewClientMock()
-	manager := Test(context.Background(), db)
-
-	key := "testkey"
-
-	mock.ExpectDel(key).SetVal(1)
-
-	err := manager.Del(key)
+	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
 
-func TestClose(t *testing.T) {
-	db, _ := redismock.NewClientMock()
-	manager := Test(context.Background(), db)
+func TestManager_Del(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ExpectDel("key1").SetVal(1)
+
+	err := manager.Del("key1")
+	assert.NoError(t, err)
+
+	err = mock.ExpectationsWereMet()
+	assert.NoError(t, err)
+}
+
+func TestManager_Scan(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ExpectScan(uint64(0), "*", int64(10)).SetVal([]string{"key1", "key2"}, uint64(0))
+
+	keys, cursor, err := manager.Scan(0, "*", 10)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"key1", "key2"}, keys)
+	assert.Equal(t, uint64(0), cursor)
+
+	err = mock.ExpectationsWereMet()
+	assert.NoError(t, err)
+}
+
+func TestManager_MGet(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ExpectMGet("key1", "key2").SetVal([]interface{}{"value1", "value2"})
+
+	values, err := manager.MGet([]string{"key1", "key2"})
+	assert.NoError(t, err)
+	assert.Equal(t, []interface{}{"value1", "value2"}, values)
+
+	err = mock.ExpectationsWereMet()
+	assert.NoError(t, err)
+}
+
+func TestManager_Close(t *testing.T) {
+	client, mock := redismock.NewClientMock()
+
+	manager := redis.Test(client)
+	mock.ClearExpect()
 
 	err := manager.Close()
+	assert.NoError(t, err)
+
+	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
