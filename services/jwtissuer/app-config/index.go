@@ -78,13 +78,13 @@ func Init() (*AppConfig, error) {
 		log.Printf("Connecting to Zookeeper at addresses: %s\n", zookeeperAddresses)
 		zookeeperConfig, err := readConfigInZooKeeper(zookeeperAddresses, configPath)
 		if err != nil {
-			return nil, err
+			log.Printf("error reading config from Zookeeper: %v\n", err)
+		} else {
+			zkEnvConfig := Configurator.ReadConfigValuesFromStruct(zookeeperConfig)
+			Configurator.ApplyConfigValues(appConfig, zkEnvConfig)
+			log.Println("Configuration updated with values from Zookeeper")
+			Configurator.Print(appConfig)
 		}
-
-		zkEnvConfig := Configurator.ReadConfigValuesFromStruct(zookeeperConfig)
-		Configurator.ApplyConfigValues(appConfig, zkEnvConfig)
-		log.Println("Configuration updated with values from Zookeeper")
-		Configurator.Print(appConfig)
 	}
 
 	Configurator.ApplyConfigValues(appConfig, envConfig)
