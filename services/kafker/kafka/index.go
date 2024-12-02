@@ -2,11 +2,17 @@ package kafka
 
 import (
 	"fmt"
+	"log"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
 )
+
+const _MAX_RETRIES = 10
+const _MIN_DELAY = 1 * time.Second
+const _MAX_DELAY = 5 * time.Second
 
 type Client struct {
 	brokers []string
@@ -34,15 +40,26 @@ func New(brokersAddress string) (*Client, error) {
 	config.Net.ReadTimeout = 10 * time.Second
 	config.Net.WriteTimeout = 10 * time.Second
 
-	client, err := sarama.NewClient(brokers, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %v", err)
+	var client sarama.Client
+	var err error
+
+	for attempt := 1; attempt <= _MAX_RETRIES; attempt++ {
+		client, err = sarama.NewClient(brokers, sarama.NewConfig())
+		if err == nil {
+			return &Client{
+				brokers: brokers,
+				client:  client,
+			}, nil
+		}
+
+		log.Printf("Attempt %d/%d failed to connect to Kafka brokers: %v", attempt, _MAX_RETRIES, err)
+
+		delay := time.Duration(rand.Int63n(int64(_MAX_DELAY-_MIN_DELAY))) + _MIN_DELAY
+		log.Printf("Retrying in %v...", delay)
+		time.Sleep(delay)
 	}
 
-	return &Client{
-		brokers: brokers,
-		client:  client,
-	}, nil
+	return nil, err
 }
 
 // ReadPartitions retrieves the partitions for a given topic from the Kafka broker.
