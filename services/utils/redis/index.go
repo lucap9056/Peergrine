@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -9,24 +10,39 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+const _MAX_RETRY_ATTEMPTS = 10
+const _RETRY_INTERVAL_TIME = time.Second * 5
+
 type Manager struct {
-	ctx           context.Context
 	client        *redis.Client
 	clusterClient *redis.ClusterClient
 }
 
-func Test(client *redis.Client) *Manager {
-	ctx := context.Background()
-	return &Manager{ctx, client, nil}
+func Test(client *redis.Client) (*Manager, error) {
+	return clientInit(client)
 }
 
 func New(addr string) (*Manager, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr: addr,
+	})
+
+	return clientInit(client)
+}
+
+func clientInit(client *redis.Client) (*Manager, error) {
 
 	m := &Manager{
-		ctx: context.Background(),
-		client: redis.NewClient(&redis.Options{
-			Addr: addr,
-		}),
+		client: client,
+	}
+
+	for i := 0; i < _MAX_RETRY_ATTEMPTS; i++ {
+		if err := ping(m.client); err == nil {
+			break
+		} else if i == _MAX_RETRY_ATTEMPTS-1 {
+			return nil, errors.New("failed to connect to Redis after maximum retries")
+		}
+		time.Sleep(_RETRY_INTERVAL_TIME)
 	}
 
 	isCluster := m.isClusterNode()
@@ -36,6 +52,9 @@ func New(addr string) (*Manager, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		m.client.Close()
+		m.client = nil
 
 		clusterClient := redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: clusterAddrs,
@@ -49,9 +68,20 @@ func New(addr string) (*Manager, error) {
 	return m, nil
 }
 
+func ping(client *redis.Client) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+	defer cancel()
+
+	_, err := client.Ping(ctx).Result()
+	return err
+}
+
 func (r *Manager) isClusterNode() bool {
 
-	info, err := r.client.ClusterInfo(r.ctx).Result()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+
+	info, err := r.client.ClusterInfo(ctx).Result()
 	if err != nil {
 		log.Printf("Error fetching cluster info: %v", err)
 		return false
@@ -64,7 +94,10 @@ func (r *Manager) isClusterNode() bool {
 
 func (r *Manager) getClusterNodes() ([]string, error) {
 
-	result, err := r.client.ClusterNodes(r.ctx).Result()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+
+	result, err := r.client.ClusterNodes(ctx).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -90,52 +123,62 @@ func (r *Manager) getClusterNodes() ([]string, error) {
 }
 
 func (r *Manager) Get(key string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		return r.clusterClient.Get(r.ctx, key).Bytes()
+		return r.clusterClient.Get(ctx, key).Bytes()
 	}
 
-	return r.client.Get(r.ctx, key).Bytes()
+	return r.client.Get(ctx, key).Bytes()
 }
 
 func (r *Manager) Scan(cursor uint64, match string, count int64) ([]string, uint64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		return r.clusterClient.Scan(r.ctx, cursor, match, count).Result()
+		return r.clusterClient.Scan(ctx, cursor, match, count).Result()
 	}
 
-	return r.client.Scan(r.ctx, cursor, match, count).Result()
+	return r.client.Scan(ctx, cursor, match, count).Result()
 }
 
 func (r *Manager) MGet(keys []string) ([]interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		return r.clusterClient.MGet(r.ctx, keys...).Result()
+		return r.clusterClient.MGet(ctx, keys...).Result()
 	}
 
-	return r.client.MGet(r.ctx, keys...).Result()
+	return r.client.MGet(ctx, keys...).Result()
 }
 
 func (r *Manager) Set(key string, data []byte, expiration time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		return r.clusterClient.Set(r.ctx, key, data, expiration).Err()
+		return r.clusterClient.Set(ctx, key, data, expiration).Err()
 	}
 
-	return r.client.Set(r.ctx, key, data, expiration).Err()
+	return r.client.Set(ctx, key, data, expiration).Err()
 }
 
 func (r *Manager) Exists(key string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		exists, err := r.clusterClient.Exists(r.ctx, key).Result()
+		exists, err := r.clusterClient.Exists(ctx, key).Result()
 		if err != nil {
 			return false, err
 		}
 		return exists > 0, nil
 	}
 
-	exists, err := r.client.Exists(r.ctx, key).Result()
+	exists, err := r.client.Exists(ctx, key).Result()
 	if err != nil {
 		return false, err
 	}
@@ -143,18 +186,19 @@ func (r *Manager) Exists(key string) (bool, error) {
 }
 
 func (r *Manager) Del(key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+	defer cancel()
 
 	if r.clusterClient != nil {
-		return r.clusterClient.Del(r.ctx, key).Err()
+		return r.clusterClient.Del(ctx, key).Err()
 	}
 
-	return r.client.Del(r.ctx, key).Err()
+	return r.client.Del(ctx, key).Err()
 }
 
 func (r *Manager) Close() error {
-
 	if r.clusterClient != nil {
-		r.clusterClient.Close()
+		return r.clusterClient.Close()
 	}
 
 	return r.client.Close()
