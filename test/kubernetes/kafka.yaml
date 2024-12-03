@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: apache/kafka:latest
+        image: wurstmeister/kafka:latest
         env:
         - name: KAFKA_PORT
           value: "9093"
@@ -24,7 +24,7 @@ spec:
               fieldPath: metadata.name
         - name: KAFKA_ZOOKEEPER_CONNECT
           value: zookeeper:2181
-        - name: KAFKA_CREATE_TOPICS 
+        - name: KAFKA_CREATE_TOPICS
           value: "RtcBridge:6:3,MsgBridge:6:3"
         ports:
         - name: internal
@@ -39,7 +39,7 @@ kind: Service
 metadata:
   name: kafka
 spec:
-  clusterIP: None 
+  clusterIP: None
   ports:
   - name: internal
     port: 9092
