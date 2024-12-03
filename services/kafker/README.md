@@ -14,7 +14,7 @@ Kafker supports configuration through **environment variables** and **command-li
 ## Configuration Options
 
 |**Setting Field** |**Description** |**Default Value** |
-|:--|
+|-|-|-|
 |`APP_ID` |Unique service identifier (optional) |Randomly generated |
 |`APP_ADDR` |Address for the service (optional) |`:50051` |
 |`APP_CLUSTER_MODE` |Toggle for cluster mode (optional) |`false` |

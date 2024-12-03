@@ -18,7 +18,7 @@ MsgBridge service settings can be loaded from:
 ## Configuration Options
 
 | **Setting Field**         | **Description**                                     | **Default Value** |
-|----------------------------|-----------------------------------------------------|-------------------|
+|-|-|-|
 | `APP_ID`                  | Unique identifier for the service (optional)        | Randomly generated |
 | `APP_ADDR`                | Address where the service runs                      | `:80`             |
 | `APP_AUTH_ADDR`           | Address for authentication service                  | Empty             |

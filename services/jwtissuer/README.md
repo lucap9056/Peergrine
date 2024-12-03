@@ -11,7 +11,7 @@ The service provides multiple configurable options that can be set using **envir
 ### Configuration Options
 
 |**Setting Field** |**Description** |**Default Value** |
-|:--|
+|-|-|-|
 |`APP_ID` |Unique service identifier (optional) |Randomly generated |
 |`APP_CLIENTENDPOINT_ADDR` |Client endpoint address (optional) |`:80` |
 |`APP_SERVICEENDPOINT_ADDR` |Service endpoint address (optional) |`:50051` |
