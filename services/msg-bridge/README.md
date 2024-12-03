@@ -1,66 +1,95 @@
-# Peergrine MsgBridge 服務
-MsgBridge 服務負責將客戶端的訊息轉發至目標客戶端。該服務目前依賴於 `Kafker`，`Kafka` 進行水平擴展，並且配置與設定由環境變數、命令行參數或 Zookeeper 來管理。MsgBridge 能夠與 Kafka、Redis、Kafker 及其他服務進行整合，提供一個高效能的訊息橋接解決方案。
+# Peergrine MsgBridge Service
 
-## 服務設定
+The **MsgBridge** service is responsible for forwarding messages between clients. It relies on **Kafker** and **Kafka** for horizontal scaling and uses **Redis** for caching and authentication when required. Configuration can be managed through environment variables, command-line arguments, or Zookeeper.
 
-MsgBridge 服務的設定檔可以由以下來源載入：
-1. **Zookeeper**：如果指定 Zookeeper 伺服器和配置路徑，服務會從 Zookeeper 讀取配置。
-2. **環境變數**：可以透過環境變數來設置配置項。
-3. **命令行參數**：使用命令行參數來覆蓋配置項。
+This high-performance messaging bridge integrates seamlessly with Kafka, Redis, and other services to provide efficient message forwarding.
 
-## 設定概述
+---
 
-MsgBridge 的主要設定項目包括：
-- **地址設定**：服務的運行地址（`APP_ADDR`）。
-- **授權地址**：服務用於認證的地址（`APP_AUTH_ADDR`）。
-- **Redis 地址**：服務使用的 Redis 伺服器地址（`APP_REDIS_ADDR`）。
-- **Kafka 地址**：服務連接的 Kafka 伺服器地址（`APP_KAFKA_ADDR`）。
-- **Kafker 地址**：Kafker 服務的地址（`APP_KAFKER_ADDR`）。
-- **Consul 配置**：服務註冊的 Consul 地址及相關配置（`APP_CONSUL_ADDR`）。
+## Configuration Overview
 
-每個設定項都可以通過環境變數、命令行參數，或從 Zookeeper 配置中加載。
-## 設定選項
-|設定項 |描述 |預設值 |
-|-|-|-|
-|**APP_ID** |服務的唯一識別碼 (可選) |隨機生成 |
-|**APP_ADDR** |服務的運行地址 |:80 |
-|**APP_AUTH_ADDR** |授權服務的地址 |空 |
-|**APP_REDIS_ADDR** |Redis 服務的地址 |空 |
-|**APP_KAFKA_ADDR** |Kafka 服務的地址 |空 |
-|**APP_KAFKER_ADDR** |Kafker 服務的地址 |空 |
-|**APP_CONSUL_ADDR** |Consul 服務的地址 |空 |
-|**APP_SERVICE_NAME** |服務名稱 |MsgBridge |
-|**APP_SERVICE_ADDR** |服務地址 (可選) |服務自行判定 |
-|**APP_SERVICE_PORT** |服務健康檢查端口 |4000 |
-> 若 **APP_CONSUL_ADDR** 為空，則 `APP_SERVICE_NAME`、`APP_SERVICE_ADDR`、`APP_SERVICE_PORT` 三項設置將不會生效。
-> 若 **APP_AUTH_ADDR** 為空 **APP_REDIS_ADDR** 不為空，服務將會嘗試自行處理身份驗證。
-## Zookeeper 設定
-Zookeeper 配置允許 MsgBridge 服務從指定的 Zookeeper 路徑讀取設定。這對於分散式環境中管理配置非常有用。
-### Zookeeper 路徑
+MsgBridge service settings can be loaded from:
+1. **Zookeeper**: Reads settings from a specified configuration path in Zookeeper.
+2. **Environment Variables**: Sets configuration options via environment variables.
+3. **Command-Line Arguments**: Overrides configuration options using command-line arguments.
 
-MsgBridge 服務會從以下 Zookeeper 路徑讀取配置：
-- **預設路徑**：`/msg-bridge`
-### 配置流程
+---
 
-1. **Zookeeper**：如果提供了 Zookeeper 地址 (`APP_ZOOKEEPER_ADDRS`)，服務會嘗試從指定的 Zookeeper 路徑讀取設定。如果該路徑不存在，將會寫入預設設定。
-2. **環境變數**：可以通過環境變數設置設定值（例如 `APP_ID`）。
-3. **命令行參數**：也可以通過命令行參數傳遞設定值（例如 `-zookeeper-addrs`）。
-### Zookeeper 初始化
+## Configuration Options
 
-若設定路徑在 Zookeeper 中不存在，服務會自動創建該路徑並儲存預設設定。這樣即便未手動設定，服務也能使用預設值啟動。
+| **Setting Field**         | **Description**                                     | **Default Value** |
+|----------------------------|-----------------------------------------------------|-------------------|
+| `APP_ID`                  | Unique identifier for the service (optional)        | Randomly generated |
+| `APP_ADDR`                | Address where the service runs                      | `:80`             |
+| `APP_AUTH_ADDR`           | Address for authentication service                  | Empty             |
+| `APP_REDIS_ADDR`          | Address of the Redis server                         | Empty             |
+| `APP_KAFKA_ADDR`          | Address of the Kafka server                         | Empty             |
+| `APP_KAFKER_ADDR`         | Address of the Kafker service                       | Empty             |
+| `APP_CONSUL_ADDR`         | Address of the Consul service                       | Empty             |
+| `APP_SERVICE_NAME`        | Name of the service                                 | `MsgBridge`       |
+| `APP_SERVICE_ADDR`        | Service address (optional)                          | Determined by service |
+| `APP_SERVICE_PORT`        | Port for health checks                              | `4000`            |
 
-### 範例
+> **Notes:**
+> - If `APP_CONSUL_ADDR` is not set, `APP_SERVICE_NAME`, `APP_SERVICE_ADDR`, and `APP_SERVICE_PORT` will not be used.
+> - If `APP_AUTH_ADDR` is empty but `APP_REDIS_ADDR` is set, the service will attempt to handle authentication independently.
 
-以下是如何設定服務的範例：
-#### 使用環境變數
+---
 
-```
+## Zookeeper Configuration
+
+Zookeeper provides centralized management of MsgBridge settings. If Zookeeper addresses and paths are provided, MsgBridge retrieves its configuration from Zookeeper.
+
+### Zookeeper Path
+
+- **Default Path**: `/msg-bridge`  
+- Override the default path using the `CONFIG_PATH` environment variable or command-line arguments.
+
+---
+
+### Configuration Workflow
+
+1. **Zookeeper**: The service attempts to load settings from the specified Zookeeper path. If the path does not exist, it initializes with default settings and saves them to Zookeeper.
+2. **Environment Variables**: Settings like `APP_ADDR` or `APP_KAFKA_ADDR` can be specified via environment variables.
+3. **Command-Line Arguments**: Settings can also be passed via command-line arguments, such as `-zookeeper-addrs`.
+
+---
+
+### Zookeeper Initialization
+
+If the specified configuration path in Zookeeper does not exist, MsgBridge will create it and populate it with default settings, ensuring it can operate without manual configuration.
+
+---
+
+## Examples
+
+### Setting Configuration via Environment Variables
+
+```bash
 export APP_ADDR=":8080"
+export APP_AUTH_ADDR="auth-service:5000"
+export APP_REDIS_ADDR="redis:6379"
 export APP_KAFKA_ADDR="kafka:9092"
-export APP_ZOOKEEPER_ADDRS="zookeeper:2181"
+export APP_KAFKER_ADDR="kafker:50051"
+export APP_ZOOKEEPER_ADDRS="zookeeper1:2181,zookeeper2:2181"
+export CONFIG_PATH="/msg-bridge"
 ```
 
-#### 使用命令行參數
+### Setting Configuration via Command-Line Arguments
+
+```bash
+./app -zookeeper-addrs "zookeeper1:2181,zookeeper2:2181" -config-path "/msg-bridge"
 ```
-./app -ZOOKEEPER_ADDRS=zookeeper:2181 -CONFIG_PATH="/msg-bridge"
-```
+
+---
+
+## Integration
+
+MsgBridge integrates with:
+- **Kafka**: For high-performance message queuing and delivery.
+- **Redis**: For caching and optional independent authentication.
+- **Kafker**: To manage Kafka partition assignments.
+- **Zookeeper**: For centralized configuration management.
+- **Consul**: For service registration and discovery (optional).
+
+This setup ensures that MsgBridge is both scalable and reliable for handling real-time message forwarding in distributed systems.

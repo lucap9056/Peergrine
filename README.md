@@ -1,44 +1,41 @@
 # Peergrine
+Peergrine is an instant messaging application designed for seamless, private communication without the need for user account registration. Each time a user accesses the platform, a new, temporary identity is automatically created. Peergrine operates entirely within mainstream web browsers and requires a stable internet connection to ensure smooth real-time communication.
+## Key Features
 
-Peergrine是一款類似主流通訊軟體的即時通訊應用，允許用戶在不需要註冊帳號的情況下，與其他用戶進行私人文字訊息和檔案傳送。每當用戶開啟頁面時，系統會自動為其創建一個新的使用者身份，無需額外的設置或帳號管理。此應用適用於主流瀏覽器，並且需要穩定的網路連線以便進行即時通信。
-### 主要功能
+- **Instant Messaging**: Engage in private text-based conversations with selected contacts.
+- **File Transfer**: Share files such as images, documents, and more with other users.
+- **No Account Registration**: A new identity is created upon each session, eliminating the need for account management.
+- **Cross-Device Compatibility**: Works on any major browser without requiring additional software installations.
 
-- **即時訊息傳送**：用戶可以與其他選定的對象進行私人對話。
-- **檔案傳送**：支持發送檔案（例如圖片、文件等）給其他用戶。
-- **無需帳號註冊**：開啟頁面即為新用戶，簡化使用過程。
-- **跨裝置兼容**：無需安裝任何應用或軟體，適用於任何主流瀏覽器。
+## Development Background
 
-### 開發背景
+Peergrine was created to address a simple yet important need: facilitating fast, secure data transfer between unfamiliar or temporary devices without the hassle of software installation. This makes Peergrine ideal for quick, on-the-go communication and file sharing.
 
-Peergrine的開發起源於一個需求——在兩台不熟悉的裝置間快速、安全地傳送資料，且不需進行任何額外的軟體安裝。這使得它成為了移動或臨時設備間的簡便資料傳送工具。
 
-### 系統組件
-[JWTIssuer](./services/jwtissuer/README.md) 
+----
+## System Components
 
-[Kafker](./services/kafker/README.md) 
+- **[JWTIssuer](./services/jwtissuer/README.md)**: Manages identity distribution through JSON Web Tokens.
+- **[Kafker](./services/kafker/README.md)**: Allocates Kafka partitions for service distribution.
+- **[RtcBridge](./services/rtc-bridge/README.md)**: Handles WebRTC peer-to-peer signaling.
+- **[MsgBridge](./services/msg-bridge/README.md)**: Facilitates message relaying between users.
 
-[RtcBridge](./services/rtc-bridge/README.md) 
 
-[MsgBridge](./services/msg-bridge/README.md) 
-### 第三方依賴
+----
+## Third-Party Dependencies
 
-- **集中式：** 無
-- **分散式：**
-	- **Zookeeper**：協調多個服務的配置和同步。
-	- **Kafka**：部分服務橫向資料傳遞（目前計劃放棄Kafka）。
-	- **Redis**：用於實時資料存儲和快取。
+Peergrine leverages distributed technologies to ensure efficient performance:
+- **Centralized Services**: None
+- **Distributed Services**:- **Zookeeper**: Manages service configuration and synchronization across components.
+	- **Kafka**: Enables horizontal data communication between services.
+	- **Redis**: Provides real-time data caching and storage.
 
-### 已知問題
 
-- **Kafka**：目前使用Kafka進行資料傳遞的效果不理想，將考慮放棄使用Kafka並轉向內建的橫向擴展通訊機制。
+----
+## Getting Started
 
-### 使用說明
+1. Open the Peergrine webpage in any modern web browser.
+2. No account setup is required—your identity is generated automatically.
+3. Enter the recipient's identifier to begin private messaging or file sharing.
 
-1. 只需在瀏覽器中開啟Peergrine的網頁。
-2. 無需帳號或註冊，您會自動獲得一個新的用戶身份。
-3. 輸入對象的識別碼，開始發送私人訊息或檔案。
-
-### 預期未來更新
-
-- 實現自有通訊系統的擴展能力。
-- 增強資料傳輸的穩定性與安全性，支持更多類型的檔案。
+For additional details on individual components or deployment, refer to the [documentation](./services).
