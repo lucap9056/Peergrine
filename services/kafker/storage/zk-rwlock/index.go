@@ -3,6 +3,7 @@ package zkrwlock
 import (
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func WLock(conn *zk.Conn, path string) (*ZkWLock, error) {
 		}
 		log.Printf("Retrieved children for path %s: %v", path, nodes)
 
-		if !isLocked(nodes, ZKRLOCK) && !isLocked(nodes, ZKWLOCK, nodePath) {
+		if !isWriteLocked(nodes, nodePath) {
 			log.Printf("Acquired write lock at node %s", nodePath)
 			return &ZkWLock{conn: conn, nodePath: nodePath}, nil
 		}
@@ -83,7 +84,9 @@ func RLock(conn *zk.Conn, path string) (*ZkRLock, error) {
 		}
 		log.Printf("Retrieved children for path %s: %v", path, nodes)
 
-		if !isLocked(nodes, ZKWLOCK) {
+		sort.Strings(nodes)
+
+		if !isReadLocked(nodes) {
 			rLockPrefix := path + "/" + ZKRLOCK
 			log.Printf("Attempting to create read lock at %s", rLockPrefix)
 			nodePath, err := conn.CreateProtectedEphemeralSequential(rLockPrefix, nil, zk.WorldACL(zk.PermAll))
@@ -111,17 +114,33 @@ func (l *ZkRLock) RUnlock() error {
 	return nil
 }
 
-// isLocked checks if a given node is locked.
-func isLocked(nodes []string, lockType string, currentPath ...string) bool {
+func isWriteLocked(nodes []string, currentPath string) bool {
+	sort.Strings(nodes)
+	wIndex := 0
 	for _, node := range nodes {
-		if strings.Contains(node, lockType) {
-			if len(currentPath) > 0 && strings.Contains(currentPath[0], node) {
-				continue
+		if strings.Contains(node, ZKRLOCK) {
+			return true
+		} else if strings.Contains(node, ZKWLOCK) {
+
+			if strings.Contains(currentPath, node) && wIndex == 0 {
+				return false
+			} else {
+				wIndex++
 			}
-			log.Printf("Detected lock of type %s in node %s", lockType, node)
+
+		}
+	}
+
+	return true
+}
+
+func isReadLocked(nodes []string) bool {
+	for _, node := range nodes {
+		if strings.Contains(node, ZKWLOCK) {
 			return true
 		}
 	}
+
 	return false
 }
 
