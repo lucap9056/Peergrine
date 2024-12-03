@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-gateway
+  template:
+    metadata:
+      labels:
+        app: web-gateway
+    spec:
+      containers:
+      - name: web-gateway
+        image: lucap9056/peergrine_web-gateway:latest
+        ports:
+        - name: http
+          containerPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-gateway
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  selector:
+    app: web-gateway
+

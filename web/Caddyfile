@@ -1,0 +1,22 @@
+:80 {
+
+    log {
+        output stdout
+        level INFO
+    }
+
+    handle_path /api/token/* {
+        reverse_proxy jwtissuer
+    }
+
+    handle_path /api/signal/* {
+        reverse_proxy rtc-bridge
+    }
+
+    handle_path /api/message/* {
+        reverse_proxy msg-bridge
+    }
+
+    root * /usr/share/caddy
+    file_server
+}

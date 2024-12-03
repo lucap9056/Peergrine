@@ -23,17 +23,15 @@ services:
     networks:
       - centralized_peergrine_network
 
-  caddy:
-    container_name: centralized_peergrine_caddy
-    image: caddy
+  web-gateway:
+    container_name: centralized_peergrine_web-gateway
+    image: lucap9056/peergrine_web-gateway:latest
     ports:
       - "80:80"
     depends_on:
       - jwtissuer
       - rtc-bridge
       - msg-bridge
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
       - centralized_peergrine_network
 
