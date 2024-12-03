@@ -20,8 +20,11 @@ func NewProducer(brokers []string) (*Producer, error) {
 	var client sarama.SyncProducer
 	var err error
 
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+
 	for attempt := 1; attempt <= _PRODUCER_MAX_RETRIES; attempt++ {
-		client, err = sarama.NewSyncProducer(brokers, sarama.NewConfig())
+		client, err = sarama.NewSyncProducer(brokers, config)
 		if err == nil {
 			return &Producer{producer: client}, nil
 		}

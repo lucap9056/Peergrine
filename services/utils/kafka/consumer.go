@@ -20,8 +20,11 @@ func NewConsumer(brokers []string) (*Consumer, error) {
 	var client sarama.Consumer
 	var err error
 
+	config := sarama.NewConfig()
+	config.Consumer.Return.Errors = true
+
 	for attempt := 1; attempt <= _CONSUMER_MAX_RETRIES; attempt++ {
-		client, err = sarama.NewConsumer(brokers, sarama.NewConfig())
+		client, err = sarama.NewConsumer(brokers, config)
 		if err == nil {
 			return &Consumer{consumer: client}, nil
 		}
