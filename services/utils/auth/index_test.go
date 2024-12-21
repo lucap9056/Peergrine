@@ -20,7 +20,7 @@ func TestGenerateBearerToken(t *testing.T) {
 	iat := time.Now().Unix()
 	exp := iat + 3600 // 1 小時後過期
 
-	token, err := auth.GenerateBearerToken(iss, userId, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
@@ -42,7 +42,7 @@ func TestGenerateRefreshToken(t *testing.T) {
 	userId := "user_123"
 	iat := time.Now()
 
-	token, err := auth.GenerateRefreshToken(iss, userId, secret, iat)
+	token, err := auth.GenerateRefreshToken(iss, userId, 0, secret, iat)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
@@ -64,7 +64,7 @@ func TestDecodeToken(t *testing.T) {
 	iat := time.Now().Unix()
 	exp := iat + 3600
 
-	token, err := auth.GenerateBearerToken(iss, userId, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
 	assert.NoError(t, err)
 
 	claims, err := auth.DecodeToken(token, secret)
@@ -86,7 +86,7 @@ func TestExtractIssuerFromToken(t *testing.T) {
 	iat := time.Now().Unix()
 	exp := iat + 3600
 
-	token, err := auth.GenerateBearerToken(iss, userId, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
 	assert.NoError(t, err)
 
 	extractedIss, err := auth.ExtractIssuerFromToken(token)

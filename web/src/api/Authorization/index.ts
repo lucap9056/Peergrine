@@ -1,8 +1,9 @@
 import BaseEventSystem from "@Src/structs/eventSystem";
 import JWT, { Payload } from "./jwt";
 
-type AuthorizationMessage<T> = {
-    type: "Authorization";
+
+export type Message<T> = {
+    type: string;
     content: T;
 };
 
@@ -16,6 +17,7 @@ type RefreshToken = {
 } & BearerToken;
 
 type EventDefinitions = {
+    "MessageReceived": { detail: Message<any> }
     "AuthorizationStateChanged": { detail: Payload };
     "ErrorOccurred": { detail: { message: string, error: Error } };
 };
@@ -27,6 +29,8 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
 
     private static readonly WS_URL = "./api/token/initialize";
     private static readonly REFRESH_URL = "./api/token/refresh";
+
+    private refreshTokenTimeout?: NodeJS.Timeout;
 
     constructor() {
         super();
@@ -53,12 +57,16 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
     }
 
     private WebSocketMessageHandler(e: MessageEvent) {
-        const msg: AuthorizationMessage<any> = JSON.parse(e.data.toString());
+        const originalMessage: Message<any> = JSON.parse(e.data.toString());
 
-        if (msg.type === "Authorization") {
-            const authData: RefreshToken = msg.content;
-            this.ProcessAuthorization(authData);
+        if (originalMessage.type === "Authorization") {
+            const message: Message<RefreshToken> = originalMessage;
+
+            this.ProcessAuthorization(message.content);
+            return;
         }
+        
+        this.emit("MessageReceived", { detail: originalMessage });
     }
 
     private WebSocketCloseHandler() {
@@ -69,25 +77,30 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
         console.error("WebSocket error occurred.");
     }
 
-    private ProcessAuthorization(authData: RefreshToken) {
-        const jwt = new JWT(authData.access_token);
+    private ProcessAuthorization(refreshToken: RefreshToken) {
+        const jwt = new JWT(refreshToken.access_token);
         this.jwtInstance = jwt;
-        this.EmitAuthorizationStateChanged(jwt.Payload);
-
-        this.RefreshAuthToken(authData);
+        this.RefreshAuthToken(refreshToken);
+        this.emit("AuthorizationStateChanged", { detail: jwt.Payload });
     }
 
-    private RefreshAuthToken(authData: RefreshToken) {
-        const { expires_at } = authData;
+    private RefreshAuthToken(auth: RefreshToken) {
+        const { refreshTokenTimeout } = this;
+        const { expires_at } = auth;
         const duration = expires_at * 1000 - new Date().getTime();
 
-        setTimeout(async () => {
+
+        if (refreshTokenTimeout) {
+            clearTimeout(refreshTokenTimeout);
+        }
+
+        this.refreshTokenTimeout = setTimeout(async () => {
 
             try {
                 const response = await fetch(Authorization.REFRESH_URL, {
                     method: "POST",
                     headers: {
-                        "Authorization": authData.refresh_token
+                        "Authorization": auth.refresh_token
                     }
                 });
 
@@ -98,18 +111,14 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
 
                 const newTokens: BearerToken = await response.json();
                 this.jwtInstance = new JWT(newTokens.access_token);
-                Object.assign(authData, newTokens);
+                Object.assign(auth, newTokens);
 
-                this.RefreshAuthToken(authData);
+                this.RefreshAuthToken(auth);
 
             } catch (error) {
                 this.HandleError("Error while refreshing token:", error);
             }
         }, duration);
-    }
-
-    private EmitAuthorizationStateChanged(payload: Payload) {
-        this.emit("AuthorizationStateChanged", { detail: payload });
     }
 
     private HandleError(message: string, rawError: unknown): void {

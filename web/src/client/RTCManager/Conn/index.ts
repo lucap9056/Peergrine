@@ -56,7 +56,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
         super();
         this.clientId = clientId;
         this.clientName = clientName;
-        
+
         const conn = new RTCPeerConnection();
 
         conn.addEventListener("iceconnectionstatechange", () => {
@@ -67,7 +67,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
         });
 
         conn.addEventListener("signalingstatechange", () => {
-            
+
         });
 
         conn.addEventListener("datachannel", (e) => {
@@ -91,7 +91,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
 
                 setTimeout(() => {
 
-                    const signal: Signal = { client_id: clientId, sdp, candidates };
+                    const signal: Signal = { client_id: clientId, channel_id: 0, sdp, candidates };
                     this.emit("SignalChanged", { detail: signal });
 
                 }, 1000);

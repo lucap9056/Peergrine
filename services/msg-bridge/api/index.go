@@ -11,6 +11,7 @@ import (
 	Auth "peergrine/utils/auth"
 	GenericChannels "peergrine/utils/generic-channels"
 	Kafka "peergrine/utils/kafka"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
@@ -21,13 +22,14 @@ import (
 const (
 	PARAM_USER_ID   = "user_id"   // Constant for user ID parameter
 	PARAM_LINK_CODE = "link_code" // Constant for user link parameter
+	TOKEN_PARLOAD   = "payload"
 )
 
 type Server struct {
 	config          *AppConfig.AppConfig
 	storage         *Storage.Storage
 	authConnection  *grpc.ClientConn
-	authClient      ServiceAuth.ServiceauthClient
+	authClient      ServiceAuth.ServiceAuthClient
 	messageChannels GenericChannels.Channels[[]byte]
 	kafka           *Kafka.Client
 	kafkaChannelId  int32
@@ -53,10 +55,10 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 			return nil, err
 		}
 		app.authConnection = conn
-		app.authClient = ServiceAuth.NewServiceauthClient(conn)
+		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if kafka != nil {
+	if kafka != nil && !config.UnifiedMessage {
 		go app.listenKafkerMessage()
 	}
 
@@ -68,7 +70,7 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 		messageRoutes.POST("/session", app.postPublicKey)                     // POST: Save RSA public key and create an link code
 		messageRoutes.POST("/session/:"+PARAM_LINK_CODE, app.getClient)       // GET: Retrieve specific client's public key using link code
 		messageRoutes.DELETE("/session/:"+PARAM_LINK_CODE, app.removeSession) // DELETE: Remove link code
-		messageRoutes.GET("/messages", app.getSSE)                            // GET: Establish SSE to receive messages
+		messageRoutes.GET("/messages", app.listenMessage)                     // GET: Establish SSE to receive messages
 		messageRoutes.POST("/messages/:"+PARAM_USER_ID, app.postMessage)      // POST: Send an encrypted message to a specific client
 	}
 
@@ -103,15 +105,14 @@ func (app *Server) listenKafkerMessage() {
 	for {
 		msg := <-handler
 
-		var kafkaMessage KafkaMessage
-		err := json.Unmarshal(msg, &kafkaMessage)
+		var message ForawrdMessage
+		err := json.Unmarshal(msg, &message)
 		if err == nil {
-			clientId := kafkaMessage.ClientId
 
-			messageChannel := app.messageChannels.Get(clientId)
+			messageChannel := app.messageChannels.Get(message.ClientId)
 
 			if messageChannel != nil {
-				messageChannel <- kafkaMessage.Message
+				messageChannel <- message.Content
 			}
 
 		}
@@ -143,33 +144,38 @@ func (app *Server) authRequired(c *gin.Context) {
 	bearerToken := authHeader[7:]
 
 	// Check token in cache
-	cacheTokenData := app.storage.GetTokenCache(bearerToken)
-	if cacheTokenData != nil {
-		c.Set(PARAM_USER_ID, cacheTokenData.UserId)
+	cacheTokenPayload := app.storage.GetTokenCache(bearerToken)
+	if cacheTokenPayload != nil {
+		c.Set(TOKEN_PARLOAD, *cacheTokenPayload)
 	} else {
 		// If not cached, verify token with auth service
 		if app.authConnection != nil {
 			req := &ServiceAuth.AccessTokenRequest{
 				AccessToken: bearerToken,
 			}
-			res, err := app.authClient.VerifyAccessToken(context.Background(), req)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+			defer cancel()
+
+			res, err := app.authClient.VerifyAccessToken(ctx, req)
 			if err != nil {
 				log.Println(err)
 				Error(c, http.StatusUnauthorized, "Token is invalid or has expired. Please provide a valid token.")
 				return
 			}
 
-			tokenData := Auth.TokenData{
-				Token:  bearerToken,
-				Iss:    res.Iss,
-				Iat:    res.Iat,
-				Exp:    res.Exp,
-				UserId: res.UserId,
+			tokenPayload := Auth.TokenPayload{
+				Token:     bearerToken,
+				Iss:       res.Iss,
+				Iat:       res.Iat,
+				Exp:       res.Exp,
+				UserId:    res.UserId,
+				ChannelId: res.ChannelId,
 			}
 
-			app.storage.SetTokenCache(bearerToken, tokenData)
-			c.Set(PARAM_USER_ID, res.UserId)
+			app.storage.SetTokenCache(bearerToken, tokenPayload)
 
+			c.Set(TOKEN_PARLOAD, tokenPayload)
 		} else {
 			// Perform local token validation if no auth service is available
 			iss, err := Auth.ExtractIssuerFromToken(bearerToken)
@@ -190,19 +196,10 @@ func (app *Server) authRequired(c *gin.Context) {
 				return
 			}
 
-			iat, _ := (*claims)["iat"].(float64)
-			exp, _ := (*claims)["exp"].(float64)
+			tokenPayload := Auth.Claims2TokenPayload(bearerToken, claims)
 
-			tokenData := Auth.TokenData{
-				Token:  bearerToken,
-				Iss:    (*claims)["iss"].(string),
-				Iat:    int64(iat),
-				Exp:    int64(exp),
-				UserId: (*claims)["user_id"].(string),
-			}
-
-			app.storage.SetTokenCache(bearerToken, tokenData)
-			c.Set(PARAM_USER_ID, tokenData.UserId)
+			app.storage.SetTokenCache(bearerToken, tokenPayload)
+			c.Set(TOKEN_PARLOAD, tokenPayload)
 		}
 	}
 

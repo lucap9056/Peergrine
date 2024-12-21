@@ -14,6 +14,7 @@ const (
 type ClientSession struct {
 	LinkCode     string
 	ClientId     string
+	ChannelId    int32
 	SessionBytes []byte
 	ExpiresAt    int64
 }
@@ -96,14 +97,14 @@ func (s *Storage) RemoveClientSession(linkCode string) error {
 	return nil
 }
 
-func (s *Storage) SetClientChannel(clientId string) error {
+func (s *Storage) SetClientChannel(clientId string, channelId int32) error {
 
 	if s.Redis != nil {
 
 		key := REDIS_PREFIX_CLIENT_CHANNEL + clientId
 
 		content := make([]byte, 4)
-		binary.BigEndian.PutUint32(content, uint32(s.ChannelId))
+		binary.BigEndian.PutUint32(content, uint32(channelId))
 		err := s.Redis.Set(key, content, 0)
 		if err != nil {
 			return err

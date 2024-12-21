@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	Messages "peergrine/jwtissuer/api/client-endpoint/auth-lifecycle/messages"
+	ConnMap "peergrine/jwtissuer/api/conn-map"
+	Messages "peergrine/jwtissuer/client-messages"
 	Storage "peergrine/jwtissuer/storage"
 	Auth "peergrine/utils/auth"
 
@@ -27,10 +28,11 @@ type TokenDuration struct {
 }
 
 type Manager struct {
-	clients       map[string]*websocket.Conn
+	connMap       *ConnMap.ConnMap
 	mutex         *sync.RWMutex
 	storage       *Storage.Storage
 	tokenDuration TokenDuration
+	channelId     int32
 }
 
 // New 創建一個新的 WSS 管理器實例。
@@ -41,12 +43,13 @@ type Manager struct {
 // 返回值:
 //
 //	(*Manager, error): 初始化的 Manager 實例和錯誤信息（如果有）。
-func New(storage *Storage.Storage, tokenDuration TokenDuration) (*Manager, error) {
+func New(storage *Storage.Storage, connMap *ConnMap.ConnMap, tokenDuration TokenDuration, channelId int32) (*Manager, error) {
 	wss := &Manager{
-		clients:       make(map[string]*websocket.Conn),
+		connMap:       connMap,
 		mutex:         new(sync.RWMutex),
 		storage:       storage,
 		tokenDuration: tokenDuration,
+		channelId:     channelId,
 	}
 
 	return wss, nil
@@ -69,7 +72,7 @@ func (wss *Manager) InitializeAuth(c *gin.Context) {
 
 	currentTime := time.Now()
 
-	refreshToken, err := Auth.GenerateRefreshToken(serviceId, id, secret, currentTime)
+	refreshToken, err := Auth.GenerateRefreshToken(serviceId, id, wss.channelId, secret, currentTime)
 	if err != nil {
 		c.Error(err)
 		return
@@ -78,7 +81,7 @@ func (wss *Manager) InitializeAuth(c *gin.Context) {
 	iat := currentTime.Unix()
 	exp := currentTime.Add(wss.tokenDuration.Bearer).Unix()
 
-	bearerToken, err := Auth.GenerateBearerToken(serviceId, id, secret, iat, exp)
+	bearerToken, err := Auth.GenerateBearerToken(serviceId, id, wss.channelId, secret, iat, exp)
 	if err != nil {
 		c.Error(err)
 		return
@@ -93,9 +96,7 @@ func (wss *Manager) InitializeAuth(c *gin.Context) {
 		return
 	}
 
-	wss.mutex.Lock()
-	wss.clients[id] = conn
-	wss.mutex.Unlock()
+	wss.connMap.Set(id, conn)
 
 	authorizeMessage := Messages.Authorization(refreshToken, bearerToken, exp)
 
@@ -124,13 +125,7 @@ func (wss *Manager) InitializeAuth(c *gin.Context) {
 //
 //	id (string): 客戶端的唯一標識符。
 func (wss *Manager) removeClient(id string) {
-	wss.mutex.Lock()
-	defer wss.mutex.Unlock()
-
-	if conn, ok := wss.clients[id]; ok {
-		conn.Close()
-		delete(wss.clients, id)
-	}
+	wss.connMap.Del(id)
 }
 
 // HasClient 檢查客戶端是否在連接列表中。
@@ -142,8 +137,6 @@ func (wss *Manager) removeClient(id string) {
 //
 //	bool: 如果客戶端存在於列表中，則返回 true，否則返回 false。
 func (wss *Manager) HasClient(id string) bool {
-	wss.mutex.RLock()
-	_, exists := wss.clients[id]
-	wss.mutex.RUnlock()
+	_, exists := wss.connMap.Get(id)
 	return exists
 }

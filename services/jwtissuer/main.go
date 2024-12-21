@@ -6,11 +6,14 @@ import (
 	"log"
 	"net"
 	ClientEndpoint "peergrine/jwtissuer/api/client-endpoint"
+	ConnMap "peergrine/jwtissuer/api/conn-map"
 	ServiceEndpoint "peergrine/jwtissuer/api/service-endpoint"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
 	Consul "peergrine/utils/consul"
 	ConsulService "peergrine/utils/consul/service"
+	Kafka "peergrine/utils/kafka"
+	Kafker "peergrine/utils/kafker-client"
 	Shutdown "peergrine/utils/shutdown"
 	"time"
 )
@@ -51,10 +54,44 @@ func main() {
 	}
 	log.Println("Secret saved in storage.")
 
+	var kafka *Kafka.Client
+	var kafkaChannelId int32
+
+	if config.KafkaAddr != "" {
+		kafker, err := Kafker.New(config.KafkerAddr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		serviceId := config.ConsulConfig.ServiceId
+		serviceName := config.ConsulConfig.ServiceName
+		topicName := config.KafkaTopic
+
+		partitionId, err := kafker.RequestPartition(serviceId, serviceName, topicName)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer kafker.ReleasePartition(serviceId)
+
+		log.Println("listen kafka partition: ", partitionId)
+		kafkaChannelId = partitionId
+
+		kafka, err = Kafka.New(config.KafkaAddr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+	}
+
+	connMap := ConnMap.New()
+
 	{
 		// Start the service endpoint
 		log.Println("Initializing service endpoint...")
-		serviceEndpoint := ServiceEndpoint.New(storage, config)
+		serviceEndpoint := ServiceEndpoint.New(storage, config, connMap, kafka, kafkaChannelId)
 		defer serviceEndpoint.Close()
 		log.Println("Service endpoint initialized.")
 
@@ -70,7 +107,7 @@ func main() {
 	{
 		// Initialize and start the client endpoint
 		log.Println("Initializing client endpoint...")
-		clientEndpoint, err := ClientEndpoint.New(storage, config)
+		clientEndpoint, err := ClientEndpoint.New(storage, config, connMap, kafkaChannelId)
 		if err != nil {
 			log.Printf("Failed to initialize client endpoint: %v", err)
 			return

@@ -25,10 +25,10 @@ func main() {
 	}
 
 	{
-		var kafka *Kafka.Client
+
 		var kafkaChannelId int32
 
-		if config.KafkaAddr != "" {
+		if config.KafkerAddr != "" {
 
 			kafker, err := Kafker.New(config.KafkerAddr)
 			if err != nil {
@@ -49,6 +49,12 @@ func main() {
 
 			log.Println("listen kafka partition: ", partitionId)
 			kafkaChannelId = partitionId
+
+		}
+
+		var kafka *Kafka.Client
+
+		if config.KafkaAddr != "" {
 
 			kafka, err = Kafka.New(config.KafkaAddr)
 			if err != nil {

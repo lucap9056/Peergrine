@@ -1,7 +1,7 @@
 import { Message, FileMessage, ReceivedMessage, TextMessage, FileRequestMessage, FileChunkMessage } from "@Src/storage/message";
 import { FileChunk, FileInfo } from "@Src/storage/message/file";
 import BaseEventSystem from "@Src/structs/eventSystem";
-import Signaling, { LinkCode } from "@API/Signaling";
+import Signaling, { LinkCode, SignalingEvent } from "@API/Signaling";
 import ClientProfile, { ClientProfileEvent } from "@Src/client/ClientProfile";
 import Conn from "./Conn";
 
@@ -11,7 +11,7 @@ export {
 
 type EventDefinitions = {
     "UserAppended": { detail: Conn }
-    "OfferReady": { detail: LinkCode }
+    "OfferReady": { detail: { id: string, linkCode: LinkCode } }
     "ErrorOccurred": { detail: { conn: Conn, error: Error } }
     "LinkCodeDurationUpdate": { detail: number }
     "UserStatusChanged": { detail: Conn }
@@ -28,14 +28,34 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
     private api: Signaling;
 
     private users: { [userId: string]: Conn } = {};
-    private unconnectedOffers: { [connId: string]: Conn } = {};
+    private unconnectedOffers?: Conn;
 
     private linkCode?: LinkCode;
+
+    private linkCodeDurationCountdown: NodeJS.Timeout = setInterval(() => {
+        const { linkCode } = this;
+        if (linkCode) {
+            const duration = linkCode.expires_at - Math.floor(Date.now() / 1000);
+            if (duration <= 0) {
+                this.linkCode = undefined;
+            }
+
+            this.emit("LinkCodeDurationUpdate", { detail: duration });
+        }
+    }, 1000);
 
     constructor(client: ClientProfile, signaling: Signaling) {
         super();
         this.client = client;
         this.api = signaling;
+
+        signaling.on("SignalReceived", (e: SignalingEvent<"SignalReceived">) => {
+            const conn = this.unconnectedOffers;
+
+            if (conn) {
+                conn.SetConnectionTarget(e.detail);
+            }
+        });
 
         client.on("ClientNameChanged", (e: ClientProfileEvent<"ClientNameChanged">) => {
             this.ClientNameChange(e.detail);
@@ -59,17 +79,6 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
             });
         });
 
-        setInterval(() => {
-            const { linkCode } = this;
-            if (linkCode) {
-                const duration = linkCode.expires_at - Math.floor(Date.now() / 1000);
-                if (duration <= 0) {
-                    this.linkCode = undefined;
-                }
-
-                this.emit("LinkCodeDurationUpdate", { detail: duration });
-            }
-        }, 1000);
     }
 
     private ClientNameChange(name: string): void {
@@ -81,51 +90,63 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
         });
     }
 
-    public Offer(): Promise<Conn> {
+    public async Offer(): Promise<void> {
         const { ClientId, ClientName } = this.client;
-        const { api, unconnectedOffers } = this;
+        const { api } = this;
 
-        return new Promise(async (resolve, reject) => {
+        if (!api) {
+            throw new Error("Signaling API instance is unavailable. Ensure that the signaling service is initialized.");
+        }
 
-            if (!api) {
-                throw new Error("Signaling API instance is unavailable. Ensure that the signaling service is initialized.");
+        const user = new Conn(ClientId, ClientName);
+        const connId = user.ConnId;
+
+        user.on("Ready", (e) => {
+            if (this.linkCode) {
+                this.RemoveLinkCode();
             }
+            this.emit("UserAppended", e);
+        });
 
-            const user = new Conn(ClientId, ClientName);
+        user.on("Close", (e) => this.emit("UserStatusChanged", e));
 
-            user.on("Ready", (e) => {
-                if (this.linkCode) {
-                    this.RemoveLinkCode();
+        user.on("ErrorOccurred", (e) => {
+            console.error(e);
+            this.emit("ErrorOccurred", e);
+        });
+
+        user.on("SignalChanged", async (e) => {
+
+            api.SetSignal(e.detail,
+                (signal) => {
+                    delete this.unconnectedOffers;
+                    user.SetConnectionTarget(signal);
                 }
-                this.emit("UserAppended", e);
-                resolve(user);
-            });
-            user.on("Close", (e) => this.emit("UserStatusChanged", e));
+            ).then((linkCode) => {
 
-            user.on("ErrorOccurred", (e) => this.emit("ErrorOccurred", e));
-
-            user.on("SignalChanged", async (e) => {
-
-                api.SetSignal(e.detail,
-                    (signal) => {
-                        user.SetConnectionTarget(signal);
+                this.emit("OfferReady", {
+                    detail: {
+                        id: connId,
+                        linkCode
                     }
-                ).then((linkCode) => {
-                    this.linkCode = linkCode;
-                    this.emit("OfferReady", { detail: linkCode });
-                }).catch(reject);
+                });
+                this.linkCode = linkCode;
+
+            }).catch((err) => {
+                this.emit("ErrorOccurred", { detail: { conn: user, error: err as Error } });
             });
-            await user.CreateOffer();
-            unconnectedOffers[user.ConnId] = user;
+
 
         });
+        await user.CreateOffer();
+        this.unconnectedOffers = user;
     }
 
     public async Answer(linkCode: string): Promise<Conn> {
         const { ClientId, ClientName } = this.client;
         const { api } = this;
 
-        return new Promise(async (resolve) => {
+        return new Promise(async (resolve, reject) => {
 
             if (!api) {
                 throw new Error("Signaling API instance is unavailable. Ensure that the signaling service is initialized.");
@@ -147,7 +168,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
             user.on("SignalChanged", (e) => {
                 const signal = e.detail;
 
-                api.ForwardSignal(linkCode, signal);
+                api.ForwardSignal(linkCode, signal).catch(reject);
             });
 
             user.CreateAnswer(targetSignal);
@@ -159,7 +180,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
         return this.linkCode;
     }
 
-    public RemoveLinkCode(): Promise<number> {
+    public RemoveLinkCode(): void {
         const { api, linkCode } = this;
 
         if (!api) {
@@ -172,7 +193,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
         linkCode.expires_at = 0;
 
-        return api.RemoveSignal(linkCode.link_code);
+        return api.RemoveSignal();
     }
 
     public SendTextMessage(userId: string, content: string): TextMessage {
@@ -236,5 +257,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
         Object.values(this.users).forEach(user => {
             user.Close();
         });
+
+        clearInterval(this.linkCodeDurationCountdown);
     }
 }

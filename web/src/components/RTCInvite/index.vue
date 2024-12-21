@@ -6,6 +6,7 @@ import Client from '@Src/client';
 import { RTCEvent } from "@Src/client/RTCManager";
 
 import { Loading, loadingManager } from "@Components/Loading";
+import notificationManager, { Notification } from '../Notifications';
 
 // QRCode class used for generating QR codes
 declare class QRCode {
@@ -59,7 +60,8 @@ export default defineComponent({
         };
 
         const OfferReadyReceivedHandler = (e: RTCEvent<"OfferReady">) => {
-            const { link_code } = e.detail;
+            const { link_code } = e.detail.linkCode;
+            
             linkCode.value = link_code;
             GenerateQrCode(link_code);
 
@@ -112,24 +114,37 @@ export default defineComponent({
             }
         });
 
-        const HandleUserAppend = (e: KeyboardEvent) => {
+        const HandleUserAppend = async (e: KeyboardEvent) => {
             const input = e.target as HTMLInputElement;
             if (e.key !== "Enter") return;
-
-            loadingState.appendUser = loadingManager.Add();
-            Rtc.Answer(input.value).then(() => {
+            const loading = loadingManager.Add();
+            try {
+                await Rtc.Answer(input.value);
                 router.push(ROUTE_PATHS.CHANNELS);
-
-            });
-            input.value = "";
+            }
+            catch (err) {
+                const notofication = new Notification(Notification.TYPE.ERROR, (err as Error).message);
+                notificationManager.AddNotification(notofication);
+            }
+            finally {
+                loading.Remove();
+                input.value = "";
+            }
         };
 
         const HandleCreateNewLinkCode = async () => {
+
             const loading = loadingManager.Add();
-            Rtc.Offer().catch(() => {
+            try {
+                await Rtc.Offer();
+            }
+            catch (err) {
+                notificationManager.AddNotification(new Notification(Notification.TYPE.ERROR, (err as Error).message));
+            }
+            finally {
                 loading.Remove();
-            });
-            loadingState.qrcode = loading;
+            }
+
         };
 
         const HandleRemoveLinkCode = () => {

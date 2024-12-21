@@ -2,21 +2,21 @@ package serviceendpoint
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	ServiceAuth "peergrine/grpc/serviceauth"
+	ConnMap "peergrine/jwtissuer/api/conn-map"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
 	Auth "peergrine/utils/auth"
+	Kafka "peergrine/utils/kafka"
 
+	"github.com/IBM/sarama"
+	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 )
 
-type AuthServiceServer struct {
-	storage *Storage.Storage
-	ServiceAuth.UnimplementedServiceauthServer
-}
-
-func (s *AuthServiceServer) VerifyAccessToken(ctx context.Context, req *ServiceAuth.AccessTokenRequest) (*ServiceAuth.TokenResponse, error) {
+func (s *App) VerifyAccessToken(ctx context.Context, req *ServiceAuth.AccessTokenRequest) (*ServiceAuth.TokenResponse, error) {
 
 	iss, err := Auth.ExtractIssuerFromToken(req.AccessToken)
 	if err != nil {
@@ -35,46 +35,109 @@ func (s *AuthServiceServer) VerifyAccessToken(ctx context.Context, req *ServiceA
 
 	iat, _ := (*claims)["iat"].(float64)
 	exp, _ := (*claims)["exp"].(float64)
+	channelId, _ := (*claims)["channel_id"].(float64)
 
 	res := ServiceAuth.TokenResponse{
-		Iss:    (*claims)["iss"].(string),
-		Iat:    int64(iat),
-		Exp:    int64(exp),
-		UserId: (*claims)["user_id"].(string),
+		Iss:       (*claims)["iss"].(string),
+		Iat:       int64(iat),
+		Exp:       int64(exp),
+		UserId:    (*claims)["user_id"].(string),
+		ChannelId: int32(channelId),
 	}
 
 	return &res, nil
 }
 
-type Server struct {
-	*grpc.Server
-	service *AuthServiceServer
+func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageRequest) (*ServiceAuth.SendMessageResponse, error) {
+
+	if s.kafkaChannelId == req.ChannelId {
+		conn, ok := s.connMap.Get(req.ClientId)
+		if ok {
+			err := conn.WriteMessage(websocket.TextMessage, req.Message)
+			if err != nil {
+				return nil, err
+			}
+
+		}
+	} else {
+		message, _ := json.Marshal(req)
+
+		_, _, err := s.kafka.SendMessage(s.config.KafkaTopic, message, req.ChannelId)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &ServiceAuth.SendMessageResponse{
+		Success: true,
+	}, nil
 }
 
-func New(storage *Storage.Storage, config *AppConfig.AppConfig) *Server {
+type App struct {
+	ServiceAuth.UnimplementedServiceAuthServer
+	server         *grpc.Server
+	config         *AppConfig.AppConfig
+	storage        *Storage.Storage
+	connMap        *ConnMap.ConnMap
+	kafka          *Kafka.Client
+	kafkaChannelId int32
+}
+
+func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap, kafka *Kafka.Client, kafkaChannelId int32) *App {
 	server := grpc.NewServer()
-	service := &AuthServiceServer{
-		storage: storage,
+
+	app := &App{
+		server:         server,
+		config:         config,
+		storage:        storage,
+		connMap:        connMap,
+		kafka:          kafka,
+		kafkaChannelId: kafkaChannelId,
 	}
 
-	ServiceAuth.RegisterServiceauthServer(server, service)
+	ServiceAuth.RegisterServiceAuthServer(server, app)
 
-	return &Server{
-		server,
-		service,
+	if kafka != nil {
+		go app.listenKafkerMessage()
 	}
+
+	return app
 }
 
-func (e *Server) Run(addr string) error {
+func (e *App) Run(addr string) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	return e.Serve(listener)
+	return e.server.Serve(listener)
 }
 
-func (e *Server) Close() {
-	e.service.storage.Close()
-	e.Server.Stop()
+func (e *App) Close() {
+	e.storage.Close()
+	e.server.Stop()
+}
+
+func (app *App) listenKafkerMessage() {
+	handler := make(chan []byte)
+	done := make(chan interface{})
+
+	app.kafka.ConsumeMessages(app.config.KafkaTopic, app.kafkaChannelId, sarama.OffsetNewest, handler, done)
+
+	for {
+		msg := <-handler
+
+		var req ServiceAuth.SendMessageRequest
+		err := json.Unmarshal(msg, &req)
+		if err == nil {
+			clientId := req.ClientId
+
+			conn, ok := app.connMap.Get(clientId)
+			if ok {
+				conn.WriteMessage(websocket.TextMessage, req.Message)
+			}
+
+		}
+		done <- nil
+	}
 }

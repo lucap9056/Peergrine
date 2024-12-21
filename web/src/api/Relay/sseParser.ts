@@ -1,18 +1,30 @@
 import pako from "pako";
 
-interface RawSessionData {
-    client_id: string;
-    public_key: string;
-}
-
 export interface SessionData {
     client_id: string;
     public_key: CryptoKey;
 }
 
-interface RawMessageData {
-    sender_id: string;
-    message: string;
+export interface RawSessionData {
+    client_id: string;
+    public_key: string;
+}
+
+export class RawSessionData {
+    public static readonly IsRawSessionData = ({ client_id, public_key }: any): (RawSessionData | undefined) => {
+        if (typeof client_id !== "string") {
+            return;
+        }
+
+        if (typeof public_key !== "string") {
+            return;
+        }
+
+        return {
+            client_id,
+            public_key
+        }
+    }
 }
 
 export interface MessageData {
@@ -20,7 +32,29 @@ export interface MessageData {
     message: string;
 }
 
-export interface Message {
+export interface RawMessageData {
+    sender_id: string;
+    message: string;
+}
+
+export class RawMessageData {
+    public static readonly IsMessageData = ({ sender_id, message }: any): (MessageData | undefined) => {
+        if (typeof sender_id !== "string") {
+            return;
+        }
+
+        if (typeof message !== "string") {
+            return;
+        }
+
+        return {
+            sender_id,
+            message
+        }
+    }
+}
+
+interface Message {
     event: string;
     data: string;
 }
@@ -84,10 +118,10 @@ export default class SSEParser {
     }
 
     // Decode the message data by decompressing and decrypting it
-    public async DecodeMessageData(data: string): Promise<MessageData> {
+    public async DecodeMessageData(raw: string | RawMessageData): Promise<MessageData> {
         const { keyName, privateKey } = this;
 
-        const { sender_id, message }: RawMessageData = JSON.parse(data);
+        const { sender_id, message }: RawMessageData = (typeof raw === "string") ? JSON.parse(raw) : raw;
 
         // Convert the base64 message to bytes
         const messageBytes = Uint8Array.from(atob(message), c => c.charCodeAt(0));
@@ -116,8 +150,8 @@ export default class SSEParser {
     }
 
     // Decode the session data by decompressing the public key and importing it
-    public async DecodeSessionData(rawStr: string): Promise<SessionData> {
-        const rawSessionData: RawSessionData = JSON.parse(rawStr);
+    public async DecodeSessionData(raw: string | RawSessionData): Promise<SessionData> {
+        const rawSessionData: RawSessionData = (typeof raw === "string") ? JSON.parse(raw) : raw;
         const { keyFormat, keyName, hashName } = this;
         const { client_id } = rawSessionData;
 

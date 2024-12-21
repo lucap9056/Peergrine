@@ -11,6 +11,7 @@ import (
 	Auth "peergrine/utils/auth"
 	GenericChannels "peergrine/utils/generic-channels"
 	Kafka "peergrine/utils/kafka"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
@@ -21,13 +22,14 @@ import (
 const (
 	PARAM_USER_ID   = "user_id"   // 常數，用於上下文中的客戶端 ID 參數
 	PARAM_USER_LINK = "user_link" // 常數，用於路徑中的客戶端連結參數
+	TOKEN_PARLOAD   = "payload"
 )
 
 type API struct {
 	config         *AppConfig.AppConfig
 	storage        *Storage.Storage
 	authConnection *grpc.ClientConn
-	authClient     ServiceAuth.ServiceauthClient
+	authClient     ServiceAuth.ServiceAuthClient
 	signalChannels GenericChannels.Channels[SignalData]
 	kafka          *Kafka.Client
 	kafkaChannelId int32
@@ -53,10 +55,10 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 		}
 
 		app.authConnection = conn
-		app.authClient = ServiceAuth.NewServiceauthClient(conn)
+		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if kafka != nil {
+	if kafka != nil && kafkaChannelId != -1 {
 		go app.listenKafkerSignal()
 	}
 
@@ -65,10 +67,9 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 	signalRoutes := router.Group("/", app.authRequired)
 
 	{
-		signalRoutes.GET(":"+PARAM_USER_LINK, app.getSignal)       // 獲取信號
-		signalRoutes.POST(":"+PARAM_USER_LINK, app.forwardSignal)  // 轉發信號
-		signalRoutes.POST("", app.setSignal)                       // 設置信號
-		signalRoutes.DELETE(":"+PARAM_USER_LINK, app.removeSignal) // 移除信號
+		signalRoutes.GET(":"+PARAM_USER_LINK, app.getSignal)      // 獲取信號
+		signalRoutes.POST(":"+PARAM_USER_LINK, app.forwardSignal) // 轉發信號
+		signalRoutes.POST("", app.setSignal)                      // 設置信號
 	}
 
 	app.server = &http.Server{
@@ -144,9 +145,9 @@ func (app *API) authRequired(c *gin.Context) {
 
 	bearerToken := authHeader[7:]
 
-	cacheTokenData := app.storage.GetTokenCache(bearerToken)
-	if cacheTokenData != nil {
-		c.Set(PARAM_USER_ID, cacheTokenData.UserId)
+	cacheTokenPayload := app.storage.GetTokenCache(bearerToken)
+	if cacheTokenPayload != nil {
+		c.Set(TOKEN_PARLOAD, *cacheTokenPayload)
 	} else {
 
 		if app.authConnection != nil {
@@ -155,7 +156,10 @@ func (app *API) authRequired(c *gin.Context) {
 				AccessToken: bearerToken,
 			}
 
-			res, err := app.authClient.VerifyAccessToken(context.Background(), req)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+			defer cancel()
+
+			res, err := app.authClient.VerifyAccessToken(ctx, req)
 
 			if err != nil {
 				log.Println(err)
@@ -163,17 +167,18 @@ func (app *API) authRequired(c *gin.Context) {
 				return
 			}
 
-			tokenData := Auth.TokenData{
-				Token:  bearerToken,
-				Iss:    res.Iss,
-				Iat:    res.Iat,
-				Exp:    res.Exp,
-				UserId: res.UserId,
+			tokenPayload := Auth.TokenPayload{
+				Token:     bearerToken,
+				Iss:       res.Iss,
+				Iat:       res.Iat,
+				Exp:       res.Exp,
+				UserId:    res.UserId,
+				ChannelId: res.ChannelId,
 			}
 
-			app.storage.SetTokenCache(bearerToken, tokenData)
+			app.storage.SetTokenCache(bearerToken, tokenPayload)
 
-			c.Set(PARAM_USER_ID, res.UserId)
+			c.Set(TOKEN_PARLOAD, tokenPayload)
 
 		} else {
 
@@ -195,19 +200,10 @@ func (app *API) authRequired(c *gin.Context) {
 				return
 			}
 
-			iat, _ := (*claims)["iat"].(float64)
-			exp, _ := (*claims)["exp"].(float64)
+			tokenPayload := Auth.Claims2TokenPayload(bearerToken, claims)
 
-			tokenData := Auth.TokenData{
-				Token:  bearerToken,
-				Iss:    (*claims)["iss"].(string),
-				Iat:    int64(iat),
-				Exp:    int64(exp),
-				UserId: (*claims)["user_id"].(string),
-			}
-
-			app.storage.SetTokenCache(bearerToken, tokenData)
-			c.Set(PARAM_USER_ID, tokenData.UserId)
+			app.storage.SetTokenCache(bearerToken, tokenPayload)
+			c.Set(TOKEN_PARLOAD, tokenPayload)
 
 		}
 

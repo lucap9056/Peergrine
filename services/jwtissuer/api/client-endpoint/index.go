@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	AuthLifecycle "peergrine/jwtissuer/api/client-endpoint/auth-lifecycle"
+	ConnMap "peergrine/jwtissuer/api/conn-map"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
 	Auth "peergrine/utils/auth"
@@ -22,6 +23,7 @@ type ClientEndpoint struct {
 	server        *gin.Engine
 	storage       *Storage.Storage
 	tokenDuration AuthLifecycle.TokenDuration
+	channelId     int32
 }
 
 func AtoD(str string) (time.Duration, error) {
@@ -43,7 +45,7 @@ func AtoD(str string) (time.Duration, error) {
 // 返回值:
 //
 //	*API: 初始化的 API 實例。
-func New(storage *Storage.Storage, config *AppConfig.AppConfig) (*ClientEndpoint, error) {
+func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap, channelId int32) (*ClientEndpoint, error) {
 
 	bearerTokenDuration, err := AtoD(config.BearerTokenDuration)
 	if err != nil {
@@ -66,9 +68,10 @@ func New(storage *Storage.Storage, config *AppConfig.AppConfig) (*ClientEndpoint
 		server:        server,
 		storage:       storage,
 		tokenDuration: tokenDuration,
+		channelId:     channelId,
 	}
 
-	authLifecycle, err := AuthLifecycle.New(storage, tokenDuration)
+	authLifecycle, err := AuthLifecycle.New(storage, connMap, tokenDuration, channelId)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +135,7 @@ func (app *ClientEndpoint) RefreshToken(c *gin.Context) {
 		Error(c, http.StatusInternalServerError, err)
 	}
 
-	bearerToken, err := Auth.GenerateBearerToken(serviceId, userId, secret, iat, exp)
+	bearerToken, err := Auth.GenerateBearerToken(serviceId, userId, app.channelId, secret, iat, exp)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "Failed to generate new access token")
 		return
@@ -166,13 +169,13 @@ func (app *ClientEndpoint) TransferToken(c *gin.Context) {
 		Error(c, http.StatusInternalServerError, err)
 	}
 
-	refreshToken, err := Auth.GenerateRefreshToken(serviceId, userId, secret, currentTime)
+	refreshToken, err := Auth.GenerateRefreshToken(serviceId, userId, app.channelId, secret, currentTime)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "Failed to generate new refresh token")
 		return
 	}
 
-	bearerToken, err := Auth.GenerateBearerToken(serviceId, userId, secret, iat, exp)
+	bearerToken, err := Auth.GenerateBearerToken(serviceId, userId, app.channelId, secret, iat, exp)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "Failed to generate new access token")
 		return
