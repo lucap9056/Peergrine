@@ -19,101 +19,139 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Serviceauth_VerifyAccessToken_FullMethodName = "/serviceauth.serviceauth/VerifyAccessToken"
+	ServiceAuth_VerifyAccessToken_FullMethodName = "/serviceauth.ServiceAuth/VerifyAccessToken"
+	ServiceAuth_SendMessage_FullMethodName       = "/serviceauth.ServiceAuth/SendMessage"
 )
 
-// ServiceauthClient is the client API for Serviceauth service.
+// ServiceAuthClient is the client API for ServiceAuth service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ServiceauthClient interface {
+type ServiceAuthClient interface {
 	VerifyAccessToken(ctx context.Context, in *AccessTokenRequest, opts ...grpc.CallOption) (*TokenResponse, error)
+	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 }
 
-type serviceauthClient struct {
+type serviceAuthClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewServiceauthClient(cc grpc.ClientConnInterface) ServiceauthClient {
-	return &serviceauthClient{cc}
+func NewServiceAuthClient(cc grpc.ClientConnInterface) ServiceAuthClient {
+	return &serviceAuthClient{cc}
 }
 
-func (c *serviceauthClient) VerifyAccessToken(ctx context.Context, in *AccessTokenRequest, opts ...grpc.CallOption) (*TokenResponse, error) {
+func (c *serviceAuthClient) VerifyAccessToken(ctx context.Context, in *AccessTokenRequest, opts ...grpc.CallOption) (*TokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TokenResponse)
-	err := c.cc.Invoke(ctx, Serviceauth_VerifyAccessToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ServiceAuth_VerifyAccessToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ServiceauthServer is the server API for Serviceauth service.
-// All implementations must embed UnimplementedServiceauthServer
-// for forward compatibility.
-type ServiceauthServer interface {
-	VerifyAccessToken(context.Context, *AccessTokenRequest) (*TokenResponse, error)
-	mustEmbedUnimplementedServiceauthServer()
+func (c *serviceAuthClient) SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, ServiceAuth_SendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
-// UnimplementedServiceauthServer must be embedded to have
+// ServiceAuthServer is the server API for ServiceAuth service.
+// All implementations must embed UnimplementedServiceAuthServer
+// for forward compatibility.
+type ServiceAuthServer interface {
+	VerifyAccessToken(context.Context, *AccessTokenRequest) (*TokenResponse, error)
+	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
+	mustEmbedUnimplementedServiceAuthServer()
+}
+
+// UnimplementedServiceAuthServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedServiceauthServer struct{}
+type UnimplementedServiceAuthServer struct{}
 
-func (UnimplementedServiceauthServer) VerifyAccessToken(context.Context, *AccessTokenRequest) (*TokenResponse, error) {
+func (UnimplementedServiceAuthServer) VerifyAccessToken(context.Context, *AccessTokenRequest) (*TokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VerifyAccessToken not implemented")
 }
-func (UnimplementedServiceauthServer) mustEmbedUnimplementedServiceauthServer() {}
-func (UnimplementedServiceauthServer) testEmbeddedByValue()                     {}
+func (UnimplementedServiceAuthServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedServiceAuthServer) mustEmbedUnimplementedServiceAuthServer() {}
+func (UnimplementedServiceAuthServer) testEmbeddedByValue()                     {}
 
-// UnsafeServiceauthServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ServiceauthServer will
+// UnsafeServiceAuthServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ServiceAuthServer will
 // result in compilation errors.
-type UnsafeServiceauthServer interface {
-	mustEmbedUnimplementedServiceauthServer()
+type UnsafeServiceAuthServer interface {
+	mustEmbedUnimplementedServiceAuthServer()
 }
 
-func RegisterServiceauthServer(s grpc.ServiceRegistrar, srv ServiceauthServer) {
-	// If the following call pancis, it indicates UnimplementedServiceauthServer was
+func RegisterServiceAuthServer(s grpc.ServiceRegistrar, srv ServiceAuthServer) {
+	// If the following call pancis, it indicates UnimplementedServiceAuthServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Serviceauth_ServiceDesc, srv)
+	s.RegisterService(&ServiceAuth_ServiceDesc, srv)
 }
 
-func _Serviceauth_VerifyAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ServiceAuth_VerifyAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AccessTokenRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ServiceauthServer).VerifyAccessToken(ctx, in)
+		return srv.(ServiceAuthServer).VerifyAccessToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Serviceauth_VerifyAccessToken_FullMethodName,
+		FullMethod: ServiceAuth_VerifyAccessToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ServiceauthServer).VerifyAccessToken(ctx, req.(*AccessTokenRequest))
+		return srv.(ServiceAuthServer).VerifyAccessToken(ctx, req.(*AccessTokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Serviceauth_ServiceDesc is the grpc.ServiceDesc for Serviceauth service.
+func _ServiceAuth_SendMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServiceAuthServer).SendMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServiceAuth_SendMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServiceAuthServer).SendMessage(ctx, req.(*SendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ServiceAuth_ServiceDesc is the grpc.ServiceDesc for ServiceAuth service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Serviceauth_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "serviceauth.serviceauth",
-	HandlerType: (*ServiceauthServer)(nil),
+var ServiceAuth_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "serviceauth.ServiceAuth",
+	HandlerType: (*ServiceAuthServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "VerifyAccessToken",
-			Handler:    _Serviceauth_VerifyAccessToken_Handler,
+			Handler:    _ServiceAuth_VerifyAccessToken_Handler,
+		},
+		{
+			MethodName: "SendMessage",
+			Handler:    _ServiceAuth_SendMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

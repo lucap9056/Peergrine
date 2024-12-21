@@ -28,12 +28,9 @@ func main() {
 	}
 
 	{
-		var kafka *Kafka.Client
-		var kafkaChannelId int32
+		kafkaChannelId := int32(-1)
 
-		if config.KafkaAddr != "" {
-			log.Println("Kafka address provided, setting up Kafka...")
-
+		if config.KafkerAddr != "" {
 			kafker, err := Kafker.New(config.KafkerAddr)
 			if err != nil {
 				log.Println("Failed to initialize Kafker client:", err)
@@ -54,6 +51,12 @@ func main() {
 			log.Printf("Kafka partition acquired: %d\n", partitionId)
 
 			kafkaChannelId = partitionId
+		}
+
+		var kafka *Kafka.Client
+
+		if config.KafkaAddr != "" {
+			log.Println("Kafka address provided, setting up Kafka...")
 
 			log.Println("Initializing Kafka client...")
 			kafka, err = Kafka.New(config.KafkaAddr)

@@ -1,13 +1,18 @@
 package msgbridgeapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
+	ServiceAuth "peergrine/grpc/serviceauth"
+	AuthMessage "peergrine/jwtissuer/client-messages"
 	Storage "peergrine/msg-bridge/storage"
+	Auth "peergrine/utils/auth"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +21,8 @@ import (
 // Constants
 const LINK_CODE_LETTER_BYTES = "abcdefghijkmnopqrstuvwxyzABCDEFHJKLMNPQRSTUVWXYZ0123456789"
 const LINK_CODE_DURATION = 5 * time.Minute
+
+const MESSAGE_TYPE = "message-relay"
 
 // generateUniqueLinkCode generates a unique link code for signal identification.
 // It attempts to generate a unique code up to a maximum number of times, and checks
@@ -53,15 +60,31 @@ func (app *Server) generateUniqueLinkCode() (string, error) {
 	return "", fmt.Errorf("exceeded maximum attempts (%d) to generate a unique link code", maxAttempts)
 }
 
-func (app *Server) postPublicKey(c *gin.Context) {
-	clientIdValue, exists := c.Get(PARAM_USER_ID)
+func getPlayload(c *gin.Context) (*Auth.TokenPayload, error) {
+
+	tokenPayloadValue, exists := c.Get(TOKEN_PARLOAD)
 	if !exists {
-		Error(c, http.StatusForbidden, "Client ID not found in the request context")
-		return
+		return nil, errors.New("client ID not found in the request context")
 	}
-	clientId, ok := clientIdValue.(string)
+	tokenPayload, ok := tokenPayloadValue.(Auth.TokenPayload)
 	if !ok {
-		Error(c, http.StatusForbidden, "Invalid format for Client ID")
+		return nil, errors.New("invalid format for Client ID")
+	}
+
+	return &tokenPayload, nil
+}
+
+func (app *Server) getChannelId(payload *Auth.TokenPayload) (unifiedMessage bool, channelId int32) {
+	if app.config.UnifiedMessage {
+		return true, payload.ChannelId
+	}
+	return false, app.kafkaChannelId
+}
+
+func (app *Server) postPublicKey(c *gin.Context) {
+	tokenPayload, err := getPlayload(c)
+	if err != nil {
+		Error(c, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -80,7 +103,7 @@ func (app *Server) postPublicKey(c *gin.Context) {
 	expiresAt := time.Now().Add(LINK_CODE_DURATION).Unix()
 
 	session := SessionData{
-		ClientId:  clientId,
+		ClientId:  tokenPayload.UserId,
 		PublicKey: string(bodyBytes),
 	}
 
@@ -92,7 +115,8 @@ func (app *Server) postPublicKey(c *gin.Context) {
 
 	clientSession := Storage.ClientSession{
 		LinkCode:     linkCode,
-		ClientId:     clientId,
+		ClientId:     tokenPayload.UserId,
+		ChannelId:    tokenPayload.ChannelId,
 		SessionBytes: sessionBytes,
 		ExpiresAt:    expiresAt,
 	}
@@ -110,23 +134,18 @@ func (app *Server) postPublicKey(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (app *Server) getSSE(c *gin.Context) {
-	clientIdValue, exists := c.Get(PARAM_USER_ID)
-	if !exists {
-		Error(c, http.StatusForbidden, "Client ID not found in the request context")
-		return
-	}
-	clientId, ok := clientIdValue.(string)
-	if !ok {
-		Error(c, http.StatusForbidden, "Invalid format for Client ID")
-		return
-	}
-
-	messageChannnel := app.messageChannels.Add(clientId)
-	defer app.messageChannels.Del(clientId)
-
-	err := app.storage.SetClientChannel(clientId)
+func (app *Server) listenMessage(c *gin.Context) {
+	tokenPayload, err := getPlayload(c)
 	if err != nil {
+		Error(c, http.StatusForbidden, err.Error())
+		return
+	}
+
+	clientId := tokenPayload.UserId
+
+	unifiedMessage, channelId := app.getChannelId(tokenPayload)
+
+	if err := app.storage.SetClientChannel(clientId, channelId); err != nil {
 		Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to set client channel in storage: %v", err))
 		return
 	}
@@ -139,19 +158,25 @@ func (app *Server) getSSE(c *gin.Context) {
 	c.String(http.StatusOK, "event: connected")
 	c.Writer.Flush()
 
-	notify := c.Writer.CloseNotify()
+	closeNotify := c.Writer.CloseNotify()
 
-	for {
+	if unifiedMessage {
+		<-closeNotify
+	} else {
 
-		select {
-		case <-notify:
-			return
-		case message, ok := <-messageChannnel:
-			if ok {
-				c.Writer.Write(message)
-				c.Writer.Flush()
-			} else {
+		messageChannnel := app.messageChannels.Add(clientId)
+		defer app.messageChannels.Del(clientId)
+		for {
+			select {
+			case <-closeNotify:
 				return
+			case message, ok := <-messageChannnel:
+				if ok {
+					c.Writer.Write(message)
+					c.Writer.Flush()
+				} else {
+					return
+				}
 			}
 		}
 
@@ -160,15 +185,9 @@ func (app *Server) getSSE(c *gin.Context) {
 }
 
 func (app *Server) getClient(c *gin.Context) {
-	clientIdValue, exists := c.Get(PARAM_USER_ID)
-	if !exists {
-		Error(c, http.StatusForbidden, "Client ID not found in the request context")
-		return
-	}
-
-	clientId, ok := clientIdValue.(string)
-	if !ok {
-		Error(c, http.StatusForbidden, "Invalid format for Client ID")
+	tokenPayload, err := getPlayload(c)
+	if err != nil {
+		Error(c, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -193,56 +212,100 @@ func (app *Server) getClient(c *gin.Context) {
 	targetId := target.ClientId
 
 	data := SessionData{
-		ClientId:  clientId,
+		ClientId:  tokenPayload.UserId,
 		PublicKey: string(bodyBytes),
 	}
 
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to marshal message data: %v", err))
-		return
-	}
+	if app.config.UnifiedMessage {
 
-	sessionStr := fmt.Sprintf("event: append_user\n\ndata: %s\n\n", dataBytes)
+		mesage := AuthMessage.Message[SessionData]{
+			Type:    MESSAGE_TYPE,
+			Content: data,
+		}
 
-	sessionBytes := []byte(sessionStr)
+		messageBytes, _ := json.Marshal(mesage)
 
-	messageChannel := app.messageChannels.Get(targetId)
-	if messageChannel != nil {
-		messageChannel <- sessionBytes
-		c.Status(http.StatusOK)
-	} else if app.kafka != nil {
-		channelId, err := app.storage.GetClientChannel(targetId)
+		request := &ServiceAuth.SendMessageRequest{
+			ChannelId: target.ChannelId,
+			ClientId:  targetId,
+			Message:   messageBytes,
+		}
+
+		if app.kafka != nil {
+
+			requestBytes, _ := json.Marshal(request)
+
+			_, _, err := app.kafka.SendMessage(app.config.KafkaTopic, requestBytes, target.ChannelId)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, err)
+				return
+			}
+
+		} else {
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+			defer cancel()
+
+			_, err := app.authClient.SendMessage(ctx, request)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, err)
+				return
+			}
+
+		}
+
+	} else {
+
+		dataBytes, err := json.Marshal(data)
 		if err != nil {
-			Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+			Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to marshal message data: %v", err))
 			return
 		}
 
-		kafkaMessage := KafkaMessage{
-			ClientId: targetId,
-			Message:  sessionBytes,
-		}
+		sessionStr := fmt.Sprintf("event: append_user\n\ndata: %s\n\n", dataBytes)
 
-		kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
+		sessionBytes := []byte(sessionStr)
 
-		_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
-		if err != nil {
-			Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
+		messageChannel := app.messageChannels.Get(targetId)
+		if messageChannel != nil {
+			messageChannel <- sessionBytes
+		} else if app.kafka != nil {
+			channelId, err := app.storage.GetClientChannel(targetId)
+			if err != nil {
+				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+				return
+			}
+
+			kafkaMessage := ForawrdMessage{
+				ClientId: targetId,
+				Content:  sessionBytes,
+			}
+
+			kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
+
+			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
+				return
+			}
+
+		} else {
+			Error(c, http.StatusNotFound, "")
 			return
 		}
+
 	}
+
+	c.Status(http.StatusOK)
+
 }
 
 func (app *Server) postMessage(c *gin.Context) {
 	targetId := c.Param(PARAM_USER_ID)
-	clientIdValue, exists := c.Get(PARAM_USER_ID)
-	if !exists {
-		Error(c, http.StatusForbidden, "Client ID not found in the request context")
-		return
-	}
-	clientId, ok := clientIdValue.(string)
-	if !ok {
-		Error(c, http.StatusForbidden, "Invalid format for Client ID")
+
+	tokenPayload, err := getPlayload(c)
+	if err != nil {
+		Error(c, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -253,7 +316,7 @@ func (app *Server) postMessage(c *gin.Context) {
 	}
 
 	data := MessageData{
-		SenderId: clientId,
+		SenderId: tokenPayload.UserId,
 		Message:  string(bodyBytes),
 	}
 
@@ -263,40 +326,95 @@ func (app *Server) postMessage(c *gin.Context) {
 		return
 	}
 
-	messageStr := fmt.Sprintf("event: message\n\ndata: %s\n\n", dataJson)
-	messageBytes := []byte(messageStr)
+	if app.config.UnifiedMessage {
 
-	messageChannel := app.messageChannels.Get(targetId)
-	if messageChannel != nil {
-		messageChannel <- messageBytes
-		c.Status(http.StatusOK)
-	} else if app.kafka != nil {
-		channelId, err := app.storage.GetClientChannel(targetId)
-		if err != nil {
-			Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+		message := AuthMessage.Message[MessageData]{
+			Type:    MESSAGE_TYPE,
+			Content: data,
+		}
+
+		messageBytes, _ := json.Marshal(message)
+
+		request := &ServiceAuth.SendMessageRequest{
+			ChannelId: 0,
+			ClientId:  targetId,
+			Message:   messageBytes,
+		}
+
+		if app.kafka != nil {
+			channelId, err := app.storage.GetClientChannel(targetId)
+			if err != nil {
+				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+				return
+			}
+
+			request.ChannelId = channelId
+
+			requestBytes, _ := json.Marshal(request)
+
+			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, requestBytes, channelId)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, err)
+				return
+			}
+
+		} else {
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+			defer cancel()
+
+			_, err := app.authClient.SendMessage(ctx, request)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, err)
+				return
+			}
+
+		}
+
+	} else {
+
+		messageStr := fmt.Sprintf("event: message\n\ndata: %s\n\n", dataJson)
+		messageBytes := []byte(messageStr)
+
+		messageChannel := app.messageChannels.Get(targetId)
+		if messageChannel != nil {
+			messageChannel <- messageBytes
+		} else if app.kafka != nil {
+
+			channelId, err := app.storage.GetClientChannel(targetId)
+			if err != nil {
+				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+				return
+			}
+
+			kafkaMessage := ForawrdMessage{
+				ClientId: targetId,
+				Content:  messageBytes,
+			}
+
+			kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
+
+			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
+			if err != nil {
+				Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
+				return
+			}
+
+		} else {
+			Error(c, http.StatusNotFound, "")
 			return
 		}
 
-		kafkaMessage := KafkaMessage{
-			ClientId: targetId,
-			Message:  messageBytes,
-		}
-
-		kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
-
-		_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
-		if err != nil {
-			Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
-			return
-		}
 	}
+
+	c.Status(http.StatusOK)
 }
 
 func (app *Server) removeSession(c *gin.Context) {
 	linkCode := c.Param(PARAM_LINK_CODE)
-	clientId, exists := c.Get(PARAM_USER_ID)
-	if !exists {
-		Error(c, http.StatusForbidden, "Client ID not found in context")
+	tokenPayload, err := getPlayload(c)
+	if err != nil {
+		Error(c, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -306,7 +424,7 @@ func (app *Server) removeSession(c *gin.Context) {
 		return
 	}
 
-	if clientId != key.ClientId {
+	if tokenPayload.UserId != key.ClientId {
 		Error(c, http.StatusUnauthorized, "Client is not signal owner")
 		return
 	}

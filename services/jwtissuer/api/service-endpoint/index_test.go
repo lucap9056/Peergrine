@@ -3,6 +3,7 @@ package serviceendpoint
 import (
 	"context"
 	ServiceAuth "peergrine/grpc/serviceauth"
+	ConnMap "peergrine/jwtissuer/api/conn-map"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
 	Auth "peergrine/utils/auth"
@@ -24,7 +25,7 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 	Exp := currentTime.Add(time.Minute * 1).Unix()
 
 	// 生成測試 token
-	token, err := Auth.GenerateBearerToken(Iss, UserId, secret, Iat, Exp)
+	token, err := Auth.GenerateBearerToken(Iss, UserId, 0, secret, Iat, Exp)
 	if err != nil {
 		t.Fatalf("failed to generate bearer token: %v", err)
 	}
@@ -36,8 +37,9 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 	// 創建 AppConfig 實例
 	config := &AppConfig.AppConfig{}
 
+	connMap := ConnMap.New()
 	// 創建測試 server
-	server := New(storage, config)
+	server := New(storage, config, connMap, nil, 0)
 
 	// 啟動 server 在一個獨立的 goroutine 中
 	go func() {
@@ -55,7 +57,7 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	client := ServiceAuth.NewServiceauthClient(conn)
+	client := ServiceAuth.NewServiceAuthClient(conn)
 
 	// 創建 gRPC 請求
 	req := &ServiceAuth.AccessTokenRequest{

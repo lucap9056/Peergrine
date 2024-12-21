@@ -15,8 +15,8 @@ type LocalStorageManager[T base] struct {
 	mutex       *sync.RWMutex
 	dataHeap    *GenericHeap.GenericHeap[T]
 	data        map[string]T
-	tokenHeap   *GenericHeap.GenericHeap[Auth.TokenData]
-	tokens      map[string]Auth.TokenData
+	tokenHeap   *GenericHeap.GenericHeap[Auth.TokenPayload]
+	tokens      map[string]Auth.TokenPayload
 	closeTicker chan struct{}
 }
 
@@ -27,7 +27,7 @@ func NewLocalStorageManager[T base]() *LocalStorageManager[T] {
 		return a.GetExpiresAt() < b.GetExpiresAt()
 	})
 
-	tokenHeap := GenericHeap.New(func(a Auth.TokenData, b Auth.TokenData) bool {
+	tokenHeap := GenericHeap.New(func(a Auth.TokenPayload, b Auth.TokenPayload) bool {
 		return a.Exp < b.Exp
 	})
 
@@ -36,7 +36,7 @@ func NewLocalStorageManager[T base]() *LocalStorageManager[T] {
 		dataHeap:    dataHeap,
 		data:        make(map[string]T),
 		tokenHeap:   tokenHeap,
-		tokens:      make(map[string]Auth.TokenData),
+		tokens:      make(map[string]Auth.TokenPayload),
 		closeTicker: make(chan struct{}),
 	}
 
@@ -141,7 +141,7 @@ func (store *LocalStorageManager[any]) Remove(key string) {
 }
 
 // SetToken adds a new token entry to the token store.
-func (store *LocalStorageManager[any]) SetToken(tokenData Auth.TokenData) {
+func (store *LocalStorageManager[any]) SetToken(tokenData Auth.TokenPayload) {
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
 
@@ -150,7 +150,7 @@ func (store *LocalStorageManager[any]) SetToken(tokenData Auth.TokenData) {
 }
 
 // GetToken retrieves a token by its key. If the key exists, it returns the token; otherwise, it returns nil.
-func (store *LocalStorageManager[any]) GetToken(key string) *Auth.TokenData {
+func (store *LocalStorageManager[any]) GetToken(key string) *Auth.TokenPayload {
 	store.mutex.RLock()
 	tokenData, exist := store.tokens[key]
 	store.mutex.RUnlock()

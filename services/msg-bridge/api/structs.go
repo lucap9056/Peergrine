@@ -16,7 +16,7 @@ type MessageData struct {
 	Message  string `json:"message"`
 }
 
-type KafkaMessage struct {
+type ForawrdMessage struct {
 	ClientId string `json:"client_id"`
-	Message  []byte `json:"message"`
+	Content  []byte `json:"content"`
 }

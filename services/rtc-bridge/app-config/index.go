@@ -1,17 +1,12 @@
 package appconfig
 
 import (
-	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	Configurator "peergrine/utils/configurator"
 	Consul "peergrine/utils/consul/service"
-	"strings"
-	"time"
 
-	"github.com/go-zookeeper/zk"
 	"github.com/google/uuid"
 )
 
@@ -22,6 +17,7 @@ const (
 	_DEFAULT_KAFKER_ADDRESS       = "" //kafker:50051
 	_DEFAULT_KAFKA_ADDRESS        = "" //kafka:9092
 	_DEFAULT_KAFKA_TOPIC          = "RtcBridge"
+	_DEFAULT_UNIFIED_MESSAGE      = "false"
 	_DEFAULT_CONSUL_ADDRESS       = "" //consul:8500
 	_DEFAULT_SERVICE_NAME         = "RtcBridge"
 	_DEFAULT_SERVICE_HEALTHY_PORT = "4000"
@@ -35,7 +31,9 @@ type AppConfig struct {
 	RedisAddr         string         `json:"redis_address" config:"APP_REDIS_ADDR"`
 	KafkerAddr        string         `json:"kafker_address" config:"APP_KAFKER_ADDR"`
 	KafkaAddr         string         `json:"kafka_address" config:"APP_KAFKA_ADDR"`
-	KafkaTopic        string         `json:"-"`
+	KafkaTopic        string         `json:"kafka_topic" config:"APP_KAFKA_TOPIC"`
+	UnifiedMessageStr string         `json:"unified_message" config:"APP_UNIFIED_MESSAGE"`
+	UnifiedMessage    bool           `json:"-"`
 	ConsulAddr        string         `json:"consul_address" config:"APP_CONSUL_ADDR"`
 	ConsulConfig      *Consul.Config `json:"-"`
 	ConsulServiceName string         `json:"service_name" config:"APP_SERVICE_NAME"`
@@ -68,6 +66,7 @@ func Init() (*AppConfig, error) {
 		KafkerAddr:        _DEFAULT_KAFKER_ADDRESS,
 		KafkaAddr:         _DEFAULT_KAFKA_ADDRESS,
 		KafkaTopic:        _DEFAULT_KAFKA_TOPIC,
+		UnifiedMessageStr: _DEFAULT_UNIFIED_MESSAGE,
 		ConsulAddr:        _DEFAULT_CONSUL_ADDRESS,
 		ConsulServiceName: _DEFAULT_SERVICE_NAME,
 		ConsulServicePort: _DEFAULT_SERVICE_HEALTHY_PORT,
@@ -78,7 +77,13 @@ func Init() (*AppConfig, error) {
 
 	if zookeeperAddresses != "" {
 		log.Printf("Reading configuration from Zookeeper at %s...\n", zookeeperAddresses)
-		zkConfig, err := readConfigInZooKeeper(zookeeperAddresses, configPath)
+
+		if configPath == "" {
+			configPath = _DEFAULT_ZK_CONFIG_PATH
+			log.Printf("Using default Zookeeper config path: %s\n", configPath)
+		}
+
+		zkConfig, err := Configurator.ReadConfigFromZooKeeper(zookeeperAddresses, configPath, *appConfig)
 		if err != nil {
 			log.Printf("error reading config from Zookeeper: %v\n", err)
 		} else {
@@ -108,96 +113,8 @@ func Init() (*AppConfig, error) {
 		ServicePort:    appConfig.ConsulServicePort,
 	}
 
+	appConfig.UnifiedMessage = appConfig.UnifiedMessageStr == "true"
+
 	log.Println("AppConfig initialized successfully.")
 	return appConfig, nil
-}
-
-func readConfigInZooKeeper(zookeeperAddresses, configPath string) (*AppConfig, error) {
-	servers := strings.Split(zookeeperAddresses, ",")
-
-	log.Println("Connecting to Zookeeper servers...")
-	conn, _, err := zk.Connect(servers, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Zookeeper: %w", err)
-	}
-	defer conn.Close()
-
-	if configPath == "" {
-		configPath = _DEFAULT_ZK_CONFIG_PATH
-		log.Printf("Using default Zookeeper config path: %s\n", configPath)
-	}
-
-	log.Printf("Fetching configuration from Zookeeper path: %s\n", configPath)
-	configBytes, _, err := conn.Get(configPath)
-	if err != nil {
-		if err == zk.ErrNoNode {
-			log.Printf("Config path %s not found. Creating default configuration...\n", configPath)
-
-			config := AppConfig{
-				Addr:              _DEFAULT_ADDRESS,
-				AuthAddr:          _DEFAULT_AUTHORIZE_ADDRESS,
-				RedisAddr:         _DEFAULT_REDIS_ADDRESS,
-				KafkerAddr:        _DEFAULT_KAFKER_ADDRESS,
-				ConsulAddr:        _DEFAULT_CONSUL_ADDRESS,
-				ConsulServiceName: _DEFAULT_SERVICE_NAME,
-				ConsulServicePort: _DEFAULT_SERVICE_HEALTHY_PORT,
-			}
-			configBytes, err := json.Marshal(config)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal default config: %w", err)
-			}
-
-			acl := zk.WorldACL(zk.PermAll)
-
-			if err := createPathRecursive(conn, configPath, configBytes, acl); err != nil {
-				return nil, err
-			}
-
-			log.Println("Created default configuration in Zookeeper.")
-			return &config, nil
-		}
-		return nil, fmt.Errorf("failed to get config from Zookeeper: %w", err)
-	}
-
-	config := &AppConfig{}
-	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	log.Println("Successfully fetched and unmarshalled configuration from Zookeeper.")
-	return config, nil
-}
-
-func createPathRecursive(conn *zk.Conn, path string, data []byte, acl []zk.ACL) error {
-	log.Printf("Creating Zookeeper path recursively: %s\n", path)
-	pathParts := strings.Split(path, "/")
-
-	currentPath := ""
-	for _, part := range pathParts {
-		if part == "" {
-			continue
-		}
-		currentPath += "/" + part
-
-		exists, _, err := conn.Exists(currentPath)
-		if err != nil {
-			return fmt.Errorf("error checking existence of path %s: %w", currentPath, err)
-		}
-
-		if !exists {
-			_, err = conn.Create(currentPath, nil, 0, acl)
-			if err != nil {
-				return fmt.Errorf("error creating path %s: %w", currentPath, err)
-			}
-			log.Printf("Created path: %s\n", currentPath)
-		}
-	}
-
-	_, err := conn.Set(currentPath, data, -1)
-	if err != nil {
-		return fmt.Errorf("error setting data for path %s: %w", currentPath, err)
-	}
-
-	log.Printf("Updated data at path %s\n", currentPath)
-	return nil
 }

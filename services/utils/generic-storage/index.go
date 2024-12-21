@@ -48,7 +48,7 @@ func New[T base](channelId int32, redisAddr string) (*Storage[T], error) {
 // Parameters:
 //   - token (string): The token string.
 //   - tokenData (Auth.TokenData): The token data to be cached.
-func (m *Storage[any]) SetTokenCache(token string, tokenData Auth.TokenData) {
+func (m *Storage[any]) SetTokenCache(token string, tokenData Auth.TokenPayload) {
 	tokenData.SetToken(token)
 	m.Local.SetToken(tokenData)
 }
@@ -59,7 +59,7 @@ func (m *Storage[any]) SetTokenCache(token string, tokenData Auth.TokenData) {
 //
 // Returns:
 //   - *Auth.TokenData: The token data if found, or nil if not present.
-func (m *Storage[any]) GetTokenCache(token string) *Auth.TokenData {
+func (m *Storage[any]) GetTokenCache(token string) *Auth.TokenPayload {
 	return m.Local.GetToken(token)
 }
 

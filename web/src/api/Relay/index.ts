@@ -1,6 +1,6 @@
-import SseParser, { MessageData, SessionData } from "./sseParser";
+import SseParser, { RawMessageData, RawSessionData, MessageData, SessionData } from "./sseParser";
 import BaseEventSystem from "@Src/structs/eventSystem";
-import Authorization from "@API/Authorization";
+import Authorization, { AuthorizationEvent, Message } from "@API/Authorization";
 
 export interface LinkCode {
     link_code: string;
@@ -69,14 +69,44 @@ export default class MessageBridgeApi extends BaseEventSystem<EventDefinitions> 
 
     constructor(auth: Authorization, key: CryptoKeyPair) {
         super();
-        this.auth = auth;
-        this.key = key;
-        this.parser = new SseParser({
+        const parser = new SseParser({
             key_name: MessageBridgeApi.KEY_NAME,
             key_format: MessageBridgeApi.KEY_FORMAT,
             hash_name: MessageBridgeApi.HASH_NAME,
             private_key: key.privateKey,
         });
+
+        auth.on("MessageReceived", async (e: AuthorizationEvent<"MessageReceived">) => {
+            if (e.detail.type !== "message-relay") return;
+
+            const message: Message<RawSessionData | MessageData> = e.detail;
+
+            const rawSessionData = RawSessionData.IsRawSessionData(message.content);
+            if (rawSessionData !== undefined) {
+                const sessionData = await parser.DecodeSessionData(rawSessionData);
+                this.emit("UserAppended", {
+                    detail: {
+                        clientId: sessionData.client_id,
+                        publicKey: sessionData.public_key,
+                    },
+                });
+                return;
+            }
+
+            const rawMessageData = RawMessageData.IsMessageData(message.content);
+            if (rawMessageData != undefined) {
+                const messageData = await parser.DecodeMessageData(rawMessageData);
+                this.emit("MessageReceived", {
+                    detail: messageData,
+                });
+                return;
+            }
+
+        });
+
+        this.auth = auth;
+        this.key = key;
+        this.parser = parser;
     }
 
     public async Connect(): Promise<void> {

@@ -1,4 +1,5 @@
-import Authorization from "@API/Authorization";
+import Authorization, { Message, AuthorizationEvent } from "@API/Authorization";
+import BaseEventSystem from "@Src/structs/eventSystem";
 
 export type Candidate = {
     candidate: string;
@@ -13,11 +14,17 @@ export type LinkCode = {
 
 export type Signal = {
     client_id: string;
+    channel_id: number;
     sdp: string;
     candidates: RTCIceCandidate[];
 };
 
-export default class Signaling {
+type EventDefinitions = {
+    "SignalReceived": { detail: Signal }
+    "ErrorOccurred": { detail: { message: string, error: Error } };
+};
+export type SignalingEvent<T extends keyof EventDefinitions> = EventDefinitions[T];
+export default class Signaling extends BaseEventSystem<EventDefinitions> {
     private auth: Authorization;
 
     // URL constants
@@ -25,8 +32,19 @@ export default class Signaling {
     private static readonly SIGNAL_URL = `${Signaling.API_BASE_URL}`;
     private static readonly SIGNAL_WITH_LINKCODE_URL = `${Signaling.API_BASE_URL}`;
 
+    private setSignalController?: AbortController;
+
     constructor(authorization: Authorization) {
+        super();
         this.auth = authorization;
+
+        authorization.on("MessageReceived", (e: AuthorizationEvent<"MessageReceived">) => {
+            if (e.detail.type !== "message-relay") return;
+
+            const message: Message<Signal> = e.detail;
+
+            this.emit("SignalReceived", { detail: message.content });
+        });
     }
 
     /**
@@ -42,40 +60,49 @@ export default class Signaling {
     ): Promise<LinkCode> {
         const { auth } = this;
 
-        return new Promise((resolve, reject) => {
-            fetch(Signaling.SIGNAL_URL, {
+        const controller = new AbortController();
+        this.setSignalController = controller;
+
+        return new Promise(async (resolve, reject) => {
+
+            const res = await fetch(Signaling.SIGNAL_URL, {
                 method: "POST",
                 body: JSON.stringify(signal),
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${auth.AccessToken}`,
                 },
-            }).then(async (res) => {
-                if (!res.body) {
-                    throw new Error("Response body is empty");
-                }
-                if (!res.ok) {
-                    throw new Error(await res.text());
-                }
-                return res.body.getReader();
-            }).then(async (reader) => {
-                const decoder = new TextDecoder();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                signal: controller.signal
+            });
 
-                    const resultStr = decoder.decode(value);
-                    const result = JSON.parse(resultStr);
+            if (!res.body) {
+                reject(new Error("Response body is empty"));
+                return;
+            }
+            if (!res.ok) {
+                reject(await res.text());
+                return;
+            }
 
-                    if (result.link_code) {
-                        resolve(result);
-                    }
+            const reader = res.body.getReader();
 
-                    if (result.sdp) {
-                        Target(result);
-                    }
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const resultStr = decoder.decode(value);
+                const result = JSON.parse(resultStr);
+                console.log(result);
+                if (result.link_code) {
+                    resolve(result);
                 }
-            }).catch(reject);
+
+                if (result.sdp) {
+                    Target(result);
+                }
+            }
+
         });
     }
 
@@ -118,22 +145,17 @@ export default class Signaling {
     public async ForwardSignal(linkCode: string, signal: Signal): Promise<void> {
         const { auth } = this;
 
-        try {
+        const res = await fetch(`${Signaling.SIGNAL_WITH_LINKCODE_URL}${linkCode}`, {
+            method: "POST",
+            body: JSON.stringify(signal),
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${auth.AccessToken}`,
+            },
+        });
 
-            const res = await fetch(`${Signaling.SIGNAL_WITH_LINKCODE_URL}${linkCode}`, {
-                method: "POST",
-                body: JSON.stringify(signal),
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${auth.AccessToken}`,
-                },
-            });
-
-            if (!res.ok) {
-                throw new Error(`Failed to forward signal: ${res.status}`);
-            }
-        } catch (error) {
-            console.error("Error while forwarding signal:", error);
+        if (!res.ok) {
+            throw new Error(`Failed to forward signal: ${res.status}`);
         }
     }
 
@@ -143,22 +165,14 @@ export default class Signaling {
      * @param linkCode - The link code to remove.
      * @returns The HTTP status code of the deletion request.
      */
-    public async RemoveSignal(linkCode: string): Promise<number> {
-        const { auth } = this;
+    public RemoveSignal(): void {
+        const { setSignalController } = this;
 
-        try {
-            const res = await fetch(`${Signaling.SIGNAL_WITH_LINKCODE_URL}${linkCode}`, {
-                method: "DELETE",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${auth.AccessToken}`,
-                },
-            });
-
-            return res.status; // Return the status code directly
-        } catch (error) {
-            console.error("Error while removing signal:", error);
-            throw error;
+        if (setSignalController && !setSignalController.signal.aborted) {
+            try {
+                setSignalController.abort();
+            }
+            catch { }
         }
     }
 }

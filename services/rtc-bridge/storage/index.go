@@ -92,8 +92,6 @@ func New(channelId int32, redisAddr string) (*Storage, error) {
 // Returns:
 //   - error: nil if successful, otherwise an error message.
 func (m *Storage) SetSignal(signal Signal) error {
-	signal.SetChannelId(m.ChannelId)
-
 	m.Local.Set(signal)
 
 	if m.Redis != nil {
