@@ -10,10 +10,9 @@ import (
 	Storage "peergrine/rtc-bridge/storage"
 	Auth "peergrine/utils/auth"
 	GenericChannels "peergrine/utils/generic-channels"
-	Kafka "peergrine/utils/kafka"
+	Pulsar "peergrine/utils/pulsar"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,25 +25,24 @@ const (
 )
 
 type API struct {
-	config         *AppConfig.AppConfig
-	storage        *Storage.Storage
-	authConnection *grpc.ClientConn
-	authClient     ServiceAuth.ServiceAuthClient
-	signalChannels GenericChannels.Channels[SignalData]
-	kafka          *Kafka.Client
-	kafkaChannelId int32
-	server         *http.Server
+	config             *AppConfig.AppConfig
+	storage            *Storage.Storage
+	authConnection     *grpc.ClientConn
+	authClient         ServiceAuth.ServiceAuthClient
+	signalChannels     GenericChannels.Channels[SignalData]
+	pulsar             *Pulsar.Client
+	server             *http.Server
+	stopListenMessages context.CancelFunc
 }
 
 // New 創建新的 API 實例並設置相關的路由和中介軟體
-func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Client, kafkaChannelId int32) (*API, error) {
+func New(config *AppConfig.AppConfig, storage *Storage.Storage, pulsar *Pulsar.Client) (*API, error) {
 
 	app := &API{
 		config:         config,
 		storage:        storage,
 		signalChannels: GenericChannels.New[SignalData](),
-		kafka:          kafka,
-		kafkaChannelId: kafkaChannelId,
+		pulsar:         pulsar,
 	}
 
 	if config.AuthAddr != "" {
@@ -58,8 +56,12 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if kafka != nil && kafkaChannelId != -1 {
-		go app.listenKafkerSignal()
+	if pulsar != nil && !config.UnifiedMessage {
+
+		ctx, cancel := context.WithCancel(context.Background())
+		app.stopListenMessages = cancel
+		go app.listenPulsarMessages(ctx)
+
 	}
 
 	router := gin.Default()
@@ -85,6 +87,9 @@ func (app *API) Run() error {
 }
 
 func (app *API) Close() {
+	if app.stopListenMessages != nil {
+		app.stopListenMessages()
+	}
 	app.signalChannels.Close()
 	if app.authConnection != nil {
 		app.authConnection.Close()
@@ -92,15 +97,9 @@ func (app *API) Close() {
 	}
 }
 
-func (app *API) listenKafkerSignal() {
+func (app *API) listenPulsarMessages(ctx context.Context) {
 
-	handler := make(chan []byte)
-	done := make(chan interface{})
-
-	app.kafka.ConsumeMessages(app.config.KafkaTopic, app.kafkaChannelId, sarama.OffsetNewest, handler, done)
-
-	for {
-		msg := <-handler
+	for msg := range app.pulsar.ListenMessages(ctx, 10) {
 
 		var kafkerSignal KafkerSignal
 		err := json.Unmarshal(msg, &kafkerSignal)
@@ -119,8 +118,9 @@ func (app *API) listenKafkerSignal() {
 			}
 
 		}
-		done <- nil
+
 	}
+
 }
 
 // Error 處理錯誤消息並根據狀態碼響應

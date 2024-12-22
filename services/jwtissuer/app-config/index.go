@@ -7,39 +7,28 @@ import (
 	"log"
 	"os"
 	Configurator "peergrine/utils/configurator"
-	Consul "peergrine/utils/consul/service"
 )
 
 const (
 	_DEFAULT_CLIENT_ENDPOINT_ADDRESS  = ":80"
 	_DEFAULT_SERVICE_ENDPOINT_ADDRESS = ":50051"
-	_DEFAULT_REDIS_ADDRESS            = "" //redis:6379
+	_DEFAULT_REDIS_ADDRESS            = "" // redis:6379
 	_DEFAULT_BEARER_TOKEN_DURATION    = "3600"
 	_DEFAULT_REFRESH_TOKEN_DURATION   = "7200"
-	_DEFAULT_KAFKER_ADDRESS           = "" //kafker:50051
-	_DEFAULT_KAFKA_ADDRESS            = "" //kafka:9092
-	_DEFAULT_KAFKA_TOPIC              = "JwtIssuer"
-	_DEFAULT_CONSUL_ADDRESS           = "" //consul:8500
-	_DEFAULT_SERVICE_NAME             = "JWTIssuer"
-	_DEFAULT_SERVICE_HEALTHY_PORT     = "4000"
+	_DEFAULT_PULSAR_ADDRESSES         = "" // pulsar://pulsar-broker:6650
+	_DEFAULT_PULSAR_TOPIC             = "JwtIssuer"
 	_DEFAULT_ZK_CONFIG_PATH           = "/jwtissuer"
 )
 
 type AppConfig struct {
-	Id                   string         `json:"-" config:"APP_ID"`
-	ClientEndpointAddr   string         `json:"client_endpoint_address" config:"APP_CLIENTENDPOINT_ADDR"`
-	ServiceEndpointAddr  string         `json:"service_endpoint_address" config:"APP_SERVICEENDPOINT_ADDR"`
-	RedisAddr            string         `json:"redis_address" config:"APP_REDIS_ADDR"`
-	BearerTokenDuration  string         `json:"bearer_token_duration" config:"APP_BEARER_TOKEN_DURATION"`
-	RefreshTokenDuration string         `json:"refresh_token_duration" config:"APP_REFRESH_TOKEN_DURATION"`
-	KafkaAddr            string         `json:"kafka_address" config:"APP_KAFKA_ADDR"`
-	KafkerAddr           string         `json:"kafker_address" config:"APP_KAFKER_ADDR"`
-	KafkaTopic           string         `json:"kafka_topic" config:"APP_KAFKA_TOPIC"`
-	ConsulAddr           string         `json:"consul_address" config:"APP_CONSUL_ADDR"`
-	ConsulConfig         *Consul.Config `json:"-"`
-	ConsulServiceName    string         `json:"service_name" config:"APP_SERVICE_NAME"`
-	ConsulServiceAddr    string         `json:"-" config:"APP_SERVICE_ADDR"`
-	ConsulServicePort    string         `json:"service_port" config:"APP_SERVICE_PORT"`
+	Id                   string `json:"-" config:"APP_ID"`
+	ClientEndpointAddr   string `json:"client_endpoint_address" config:"APP_CLIENTENDPOINT_ADDR"`
+	ServiceEndpointAddr  string `json:"service_endpoint_address" config:"APP_SERVICEENDPOINT_ADDR"`
+	RedisAddr            string `json:"redis_address" config:"APP_REDIS_ADDR"`
+	BearerTokenDuration  string `json:"bearer_token_duration" config:"APP_BEARER_TOKEN_DURATION"`
+	RefreshTokenDuration string `json:"refresh_token_duration" config:"APP_REFRESH_TOKEN_DURATION"`
+	PulsarAddrs          string `json:"pulsar_addresses" config:"APP_PULSAR_ADDRS"`
+	PulsarTopic          string `json:"pulsar_topic" config:"APP_PULSAR_TOPIC"`
 }
 
 func Init() (*AppConfig, error) {
@@ -66,12 +55,8 @@ func Init() (*AppConfig, error) {
 		RedisAddr:            _DEFAULT_REDIS_ADDRESS,
 		BearerTokenDuration:  _DEFAULT_BEARER_TOKEN_DURATION,
 		RefreshTokenDuration: _DEFAULT_REFRESH_TOKEN_DURATION,
-		KafkerAddr:           _DEFAULT_KAFKER_ADDRESS,
-		KafkaAddr:            _DEFAULT_KAFKA_ADDRESS,
-		KafkaTopic:           _DEFAULT_KAFKA_TOPIC,
-		ConsulAddr:           _DEFAULT_CONSUL_ADDRESS,
-		ConsulServiceName:    _DEFAULT_SERVICE_NAME,
-		ConsulServicePort:    _DEFAULT_SERVICE_HEALTHY_PORT,
+		PulsarAddrs:          _DEFAULT_PULSAR_ADDRESSES,
+		PulsarTopic:          _DEFAULT_PULSAR_TOPIC,
 	}
 
 	log.Println("Reading configuration from environment and default values")
@@ -111,13 +96,6 @@ func Init() (*AppConfig, error) {
 		}
 		appConfig.Id = serviceId
 
-	}
-
-	appConfig.ConsulConfig = &Consul.Config{
-		ServiceId:      appConfig.Id,
-		ServiceName:    appConfig.ConsulServiceName,
-		ServicePort:    appConfig.ConsulServicePort,
-		ServiceAddress: appConfig.ConsulServiceAddr,
 	}
 
 	log.Println("Configuration initialization complete")

@@ -14,7 +14,7 @@ export type LinkCode = {
 
 export type Signal = {
     client_id: string;
-    channel_id: number;
+    channel_id: string;
     sdp: string;
     candidates: RTCIceCandidate[];
 };
@@ -93,7 +93,7 @@ export default class Signaling extends BaseEventSystem<EventDefinitions> {
 
                 const resultStr = decoder.decode(value);
                 const result = JSON.parse(resultStr);
-                console.log(result);
+                
                 if (result.link_code) {
                     resolve(result);
                 }

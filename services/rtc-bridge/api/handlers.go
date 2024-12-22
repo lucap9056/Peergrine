@@ -69,12 +69,11 @@ func getPlayload(c *gin.Context) (*Auth.TokenPayload, error) {
 	return &tokenPayload, nil
 }
 
-func (app *API) getChannelId(payload *Auth.TokenPayload) (bool, int32) {
+func (app *API) getChannelId(payload *Auth.TokenPayload) (bool, string) {
 	if app.config.UnifiedMessage {
 		return true, payload.ChannelId
 	}
-
-	return false, app.kafkaChannelId
+	return false, app.config.Id
 }
 
 func (app *API) setSignal(c *gin.Context) {
@@ -87,8 +86,9 @@ func (app *API) setSignal(c *gin.Context) {
 	clientId := tokenPayload.UserId
 
 	var signal SignalData
+
 	if err := c.ShouldBindJSON(&signal); err != nil {
-		Error(c, http.StatusBadRequest, "Invalid JSON format")
+		Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid JSON format: %s", err.Error()))
 		return
 	}
 
@@ -231,15 +231,14 @@ func (app *API) forwardSignal(c *gin.Context) {
 			Message:   messageBytes,
 		}
 
-		if app.kafka != nil {
-			requestBytes, _ := json.Marshal(request)
+		if app.pulsar != nil {
 
-			_, _, err := app.kafka.SendMessage(app.config.KafkaTopic, requestBytes, targetSignal.ChannelId)
+			requestBytes, _ := json.Marshal(request)
+			_, err := app.pulsar.SendMessage(targetSignal.ChannelId, requestBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return
 			}
-
 		} else {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
@@ -260,7 +259,7 @@ func (app *API) forwardSignal(c *gin.Context) {
 			signal.ClientId = clientId
 			signalChannel <- signal
 
-		} else if app.kafka != nil {
+		} else if app.pulsar != nil {
 
 			kafkerSignal := KafkerSignal{
 				LinkCode: targetLink,
@@ -268,7 +267,7 @@ func (app *API) forwardSignal(c *gin.Context) {
 			}
 			signalBytes, _ := json.Marshal(kafkerSignal)
 
-			_, _, err := app.kafka.Producer.SendMessage(app.config.KafkaTopic, signalBytes, targetSignal.ChannelId)
+			_, err := app.pulsar.SendMessage(targetSignal.ChannelId, signalBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return

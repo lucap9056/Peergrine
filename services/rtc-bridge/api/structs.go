@@ -11,7 +11,7 @@ type Candidate struct {
 type SignalData struct {
 	ClientId   string      `json:"client_id"`
 	ClientName string      `json:"client_name"`
-	ChannelId  int32       `json:"channel_id"`
+	ChannelId  string      `json:"channel_id"`
 	SDP        string      `json:"sdp"`
 	Candidates []Candidate `json:"candidates"`
 }

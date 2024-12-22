@@ -6,7 +6,10 @@ The **JWTIssuer** service is designed to manage token generation and validation,
 
 ## Configuration Overview
 
-The service provides multiple configurable options that can be set using **environment variables** or **command-line parameters**. These include network addresses, token validity durations, Redis and Consul configurations, and Zookeeper paths.
+MsgBridge service settings can be loaded from:
+1. **Zookeeper**: Reads settings from a specified configuration path in Zookeeper.
+2. **Environment Variables**: Sets configuration options via environment variables.
+3. **Command-Line Arguments**: Overrides configuration options using command-line arguments.
 
 ### Configuration Options
 
@@ -18,14 +21,10 @@ The service provides multiple configurable options that can be set using **envir
 |`APP_REDIS_ADDR` |Redis server address (optional) |None (no Redis used) |
 |`APP_BEARER_TOKEN_DURATION` |Bearer token validity duration (seconds, optional) |`3600` (1 hour) |
 |`APP_REFRESH_TOKEN_DURATION` |Refresh token validity duration (seconds, optional) |`7200` (2 hours) |
-|`APP_CONSUL_ADDR` |Consul service address (optional) |None |
-|`APP_SERVICE_NAME` |Service name (optional) |`JWTIssuer` |
-|`APP_SERVICE_ADDR` |Service address (optional) |Determined by service |
-|`APP_SERVICE_PORT` |Service health check port (optional) |`4000` |
-|`APP_ZOOKEEPER_ADDRS` |List of Zookeeper server addresses (comma-separated) |None |
+|`APP_PULSAR_ADDRS` |List of Pulsar broker addresses (optional, comma-separated) |None |
+|`APP_PULSAR_TOPIC` |Pulsar topic name for communication (optional) |None |
+|`APP_ZOOKEEPER_ADDRS` |List of Zookeeper server addresses (optional, comma-separated) |None |
 |`APP_CONFIG_PATH` |Configuration path in Zookeeper (optional) |None |
-
->**Note:** If `APP_CONSUL_ADDR` is not set, the settings `APP_SERVICE_NAME`, `APP_SERVICE_ADDR`, and `APP_SERVICE_PORT` will not be used.
 
 ----
 
@@ -38,11 +37,6 @@ The service supports centralized configuration management using Zookeeper. If Zo
 - The default configuration path in Zookeeper is `/jwtissuer`.
 
 - You can override this path by setting the `APP_CONFIG_PATH` environment variable.
-
-### Configuration Workflow
-1. **Zookeeper**: If `APP_ZOOKEEPER_ADDRS` is provided, the service attempts to read settings from the specified Zookeeper path. If the path does not exist, default settings are written to the path.
-2. **Environment Variables**: Settings can be defined through environment variables, such as `APP_CLIENTENDPOINT_ADDR`.
-3. **Command-Line Parameters**: Settings can also be passed as command-line arguments, such as `-zookeeper-addrs`.
 
 ----
 
@@ -60,6 +54,8 @@ export APP_CLIENTENDPOINT_ADDR=":8080"
 export APP_SERVICEENDPOINT_ADDR=":9090"
 export APP_BEARER_TOKEN_DURATION="3600"
 export APP_REFRESH_TOKEN_DURATION="7200"
+export APP_PULSAR_ADDRS="pulsar://pulsar-broker-0:6650,pulsar://pulsar-broker-1:6650"
+expoort APP_PULSAR_TOPIC="JwtIssuer"
 export APP_ZOOKEEPER_ADDRS="zookeeper1:2181,zookeeper2:2181"
 export APP_CONFIG_PATH="/jwtissuer"
 ```

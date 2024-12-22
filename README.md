@@ -11,25 +11,21 @@ Peergrine is an instant messaging application designed for seamless, private com
 
 Peergrine was created to address a simple yet important need: facilitating fast, secure data transfer between unfamiliar or temporary devices without the hassle of software installation. This makes Peergrine ideal for quick, on-the-go communication and file sharing.
 
-
 ----
 ## System Components
 
 - **[JWTIssuer](./services/jwtissuer/README.md)**: Manages identity distribution through JSON Web Tokens.
-- **[Kafker](./services/kafker/README.md)**: Allocates Kafka partitions for service distribution.
 - **[RtcBridge](./services/rtc-bridge/README.md)**: Handles WebRTC peer-to-peer signaling.
 - **[MsgBridge](./services/msg-bridge/README.md)**: Facilitates message relaying between users.
-
 
 ----
 ## Third-Party Dependencies
 
 Peergrine leverages distributed technologies to ensure efficient performance:
 - **Centralized Services**: None
-- **Distributed Services**:- **Zookeeper**: Manages service configuration and synchronization across components.
-	- **Kafka**: Enables horizontal data communication between services.
+- **Distributed Services**:
+	- **Pulsar**: Enables horizontal data communication between services.
 	- **Redis**: Provides real-time data caching and storage.
-
 
 ----
 ## Getting Started

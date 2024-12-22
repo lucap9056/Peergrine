@@ -10,10 +10,7 @@ import (
 	ServiceEndpoint "peergrine/jwtissuer/api/service-endpoint"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
-	Consul "peergrine/utils/consul"
-	ConsulService "peergrine/utils/consul/service"
-	Kafka "peergrine/utils/kafka"
-	Kafker "peergrine/utils/kafker-client"
+	Pulsar "peergrine/utils/pulsar"
 	Shutdown "peergrine/utils/shutdown"
 	"time"
 )
@@ -54,36 +51,15 @@ func main() {
 	}
 	log.Println("Secret saved in storage.")
 
-	var kafka *Kafka.Client
-	var kafkaChannelId int32
+	var pulsar *Pulsar.Client
 
-	if config.KafkaAddr != "" {
-		kafker, err := Kafker.New(config.KafkerAddr)
+	if config.PulsarAddrs != "" {
+		pulsar, err = Pulsar.New(config.PulsarAddrs, config.PulsarTopic, config.Id)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-
-		serviceId := config.ConsulConfig.ServiceId
-		serviceName := config.ConsulConfig.ServiceName
-		topicName := config.KafkaTopic
-
-		partitionId, err := kafker.RequestPartition(serviceId, serviceName, topicName)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		defer kafker.ReleasePartition(serviceId)
-
-		log.Println("listen kafka partition: ", partitionId)
-		kafkaChannelId = partitionId
-
-		kafka, err = Kafka.New(config.KafkaAddr)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
+		defer pulsar.Close()
 	}
 
 	connMap := ConnMap.New()
@@ -91,7 +67,7 @@ func main() {
 	{
 		// Start the service endpoint
 		log.Println("Initializing service endpoint...")
-		serviceEndpoint := ServiceEndpoint.New(storage, config, connMap, kafka, kafkaChannelId)
+		serviceEndpoint := ServiceEndpoint.New(storage, config, connMap, pulsar)
 		defer serviceEndpoint.Close()
 		log.Println("Service endpoint initialized.")
 
@@ -107,7 +83,7 @@ func main() {
 	{
 		// Initialize and start the client endpoint
 		log.Println("Initializing client endpoint...")
-		clientEndpoint, err := ClientEndpoint.New(storage, config, connMap, kafkaChannelId)
+		clientEndpoint, err := ClientEndpoint.New(storage, config, connMap)
 		if err != nil {
 			log.Printf("Failed to initialize client endpoint: %v", err)
 			return
@@ -121,53 +97,6 @@ func main() {
 				shutdown.Shutdown("Client endpoint failed: %v", err)
 			}
 		}()
-	}
-
-	{
-		if config.ConsulAddr != "" {
-			log.Printf("Initializing Consul client with address %s...", config.ConsulAddr)
-			consulClient, err := Consul.New(config.ConsulAddr)
-			if err != nil {
-				log.Printf("Failed to initialize Consul client: %v", err)
-				return
-			}
-			log.Println("Consul client initialized.")
-
-			if config.ConsulConfig.ServiceAddress == "" {
-				log.Println("Service address not specified in config; fetching local IPv4 address...")
-				serviceAddress, err := getLocalIPV4Address()
-				if err != nil {
-					log.Printf("Failed to get local IPv4 address: %v", err)
-					return
-				}
-				config.ConsulConfig.ServiceAddress = serviceAddress
-				log.Printf("Service address set to local IP: %s", serviceAddress)
-			}
-
-			log.Println("Initializing Consul service registration...")
-			consulService, err := ConsulService.New(consulClient, config.ConsulConfig)
-			if err != nil {
-				log.Printf("Failed to initialize Consul service: %v", err)
-				return
-			}
-			log.Println("Consul service initialized.")
-
-			if err := consulService.Register(); err != nil {
-				log.Printf("Failed to register service with Consul: %v", err)
-				return
-			}
-			log.Println("Service registered with Consul.")
-			defer consulService.Close()
-
-			go func() {
-				addr := fmt.Sprintf(":%v", config.ConsulConfig.ServicePort)
-				log.Printf("Running Consul TCP service on %s...", addr)
-				if err := consulService.RunTCP(addr); err != nil {
-					log.Printf("Consul service TCP run failed: %v", err)
-					shutdown.Shutdown("%v", err)
-				}
-			}()
-		}
 	}
 
 	log.Println("Waiting for shutdown signal...")

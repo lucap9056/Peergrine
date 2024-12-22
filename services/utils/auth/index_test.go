@@ -18,9 +18,10 @@ func TestGenerateBearerToken(t *testing.T) {
 	iss := "test_issuer"
 	userId := "user_123"
 	iat := time.Now().Unix()
-	exp := iat + 3600 // 1 小時後過期
+	exp := iat + 3600
+	channeId := "0"
 
-	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, channeId, secret, iat, exp)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
@@ -35,14 +36,16 @@ func TestGenerateBearerToken(t *testing.T) {
 	assert.Equal(t, userId, claims["user_id"])
 	assert.Equal(t, iat, int64(claims["iat"].(float64)))
 	assert.Equal(t, exp, int64(claims["exp"].(float64)))
+	assert.Equal(t, channeId, claims["channel_id"])
 }
 
 func TestGenerateRefreshToken(t *testing.T) {
 	iss := "test_issuer"
 	userId := "user_123"
 	iat := time.Now()
+	channeId := "0"
 
-	token, err := auth.GenerateRefreshToken(iss, userId, 0, secret, iat)
+	token, err := auth.GenerateRefreshToken(iss, userId, channeId, secret, iat)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
@@ -56,6 +59,7 @@ func TestGenerateRefreshToken(t *testing.T) {
 	assert.Equal(t, iss, claims["iss"])
 	assert.Equal(t, userId, claims["user_id"])
 	assert.Equal(t, iat.Unix(), int64(claims["iat"].(float64)))
+	assert.Equal(t, channeId, claims["channel_id"])
 }
 
 func TestDecodeToken(t *testing.T) {
@@ -63,8 +67,9 @@ func TestDecodeToken(t *testing.T) {
 	userId := "user_123"
 	iat := time.Now().Unix()
 	exp := iat + 3600
+	channeId := "0"
 
-	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, channeId, secret, iat, exp)
 	assert.NoError(t, err)
 
 	claims, err := auth.DecodeToken(token, secret)
@@ -73,6 +78,7 @@ func TestDecodeToken(t *testing.T) {
 	assert.Equal(t, userId, (*claims)["user_id"])
 	assert.Equal(t, iat, int64((*claims)["iat"].(float64)))
 	assert.Equal(t, exp, int64((*claims)["exp"].(float64)))
+	assert.Equal(t, channeId, (*claims)["channel_id"])
 
 	// 測試錯誤情況
 	invalidToken := token + "invalid"
@@ -85,8 +91,9 @@ func TestExtractIssuerFromToken(t *testing.T) {
 	userId := "user_123"
 	iat := time.Now().Unix()
 	exp := iat + 3600
+	channeId := "0"
 
-	token, err := auth.GenerateBearerToken(iss, userId, 0, secret, iat, exp)
+	token, err := auth.GenerateBearerToken(iss, userId, channeId, secret, iat, exp)
 	assert.NoError(t, err)
 
 	extractedIss, err := auth.ExtractIssuerFromToken(token)

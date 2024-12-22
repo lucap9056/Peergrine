@@ -23,7 +23,7 @@ import (
 //
 //	string: 生成的 Bearer Token。
 //	error: 如果生成令牌過程中發生錯誤，則返回錯誤信息。
-func GenerateBearerToken(iss string, userId string, channelId int32, secret []byte, iat, exp int64) (string, error) {
+func GenerateBearerToken(iss string, userId string, channelId string, secret []byte, iat, exp int64) (string, error) {
 	payload := jwt.MapClaims{
 		"iss":        iss,
 		"iat":        iat,
@@ -53,7 +53,7 @@ func GenerateBearerToken(iss string, userId string, channelId int32, secret []by
 //
 //	string: 生成的 Refresh Token。
 //	error: 如果生成令牌過程中發生錯誤，則返回錯誤信息。
-func GenerateRefreshToken(iss string, userId string, channelId int32, secret []byte, iat time.Time) (string, error) {
+func GenerateRefreshToken(iss string, userId string, channelId string, secret []byte, iat time.Time) (string, error) {
 	payload := jwt.MapClaims{
 		"iss":        iss,
 		"iat":        iat.Unix(),
@@ -102,7 +102,6 @@ func Claims2TokenPayload(token string, claims *jwt.MapClaims) (tokenPayload Toke
 
 	iat, _ := (*claims)["iat"].(float64)
 	exp, _ := (*claims)["exp"].(float64)
-	channelId, _ := (*claims)["exp"].(float64)
 
 	return TokenPayload{
 		Token:     token,
@@ -110,7 +109,7 @@ func Claims2TokenPayload(token string, claims *jwt.MapClaims) (tokenPayload Toke
 		Iat:       int64(iat),
 		Exp:       int64(exp),
 		UserId:    (*claims)["user_id"].(string),
-		ChannelId: int32(channelId),
+		ChannelId: (*claims)["channel_id"].(string),
 	}
 }
 

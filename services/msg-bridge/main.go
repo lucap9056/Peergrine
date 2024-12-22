@@ -1,15 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	API "peergrine/msg-bridge/api"
 	AppConfig "peergrine/msg-bridge/app-config"
 	Storage "peergrine/msg-bridge/storage"
-	Consul "peergrine/utils/consul"
-	ConsulService "peergrine/utils/consul/service"
-	Kafka "peergrine/utils/kafka"
-	Kafker "peergrine/utils/kafker-client"
+	Pulsar "peergrine/utils/pulsar"
 	Shutdown "peergrine/utils/shutdown"
 	"time"
 )
@@ -25,52 +21,24 @@ func main() {
 	}
 
 	{
+		var pulsar *Pulsar.Client
 
-		var kafkaChannelId int32
-
-		if config.KafkerAddr != "" {
-
-			kafker, err := Kafker.New(config.KafkerAddr)
+		if config.PulsarAddrs != "" {
+			pulsar, err = Pulsar.New(config.PulsarAddrs, config.PulsarTopic, config.Id)
 			if err != nil {
 				log.Println(err)
 				return
 			}
-
-			serviceId := config.ConsulConfig.ServiceId
-			serviceName := config.ConsulConfig.ServiceName
-			topicName := config.KafkaTopic
-
-			partitionId, err := kafker.RequestPartition(serviceId, serviceName, topicName)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			defer kafker.ReleasePartition(serviceId)
-
-			log.Println("listen kafka partition: ", partitionId)
-			kafkaChannelId = partitionId
-
+			defer pulsar.Close()
 		}
 
-		var kafka *Kafka.Client
-
-		if config.KafkaAddr != "" {
-
-			kafka, err = Kafka.New(config.KafkaAddr)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-		}
-
-		storage, err := Storage.New(kafkaChannelId, config.RedisAddr)
+		storage, err := Storage.New(config.Id, config.RedisAddr)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 
-		app, err := API.New(config, storage, kafka, kafkaChannelId)
+		app, err := API.New(config, storage, pulsar)
 		if err != nil {
 			log.Println(err)
 			return
@@ -83,49 +51,6 @@ func main() {
 				shutdown.Shutdown("")
 			}
 		}()
-	}
-
-	{
-		if config.ConsulAddr != "" {
-
-			consulClient, err := Consul.New(config.ConsulAddr)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			if config.ConsulConfig.ServiceAddress == "" {
-
-				serviceAddress, err := ConsulService.GetLocalIPV4Address()
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				config.ConsulConfig.ServiceAddress = serviceAddress
-
-			}
-
-			consulService, err := ConsulService.New(consulClient, config.ConsulConfig)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			if err := consulService.Register(); err != nil {
-				log.Println(err)
-				return
-			}
-			defer consulService.Close()
-
-			go func() {
-				addr := fmt.Sprintf(":%v", config.ConsulConfig.ServicePort)
-
-				if err := consulService.RunTCP(addr); err != nil {
-					shutdown.Shutdown("%v", err)
-				}
-			}()
-		}
 	}
 
 	shutdown.Wait()
