@@ -32,7 +32,7 @@ type Manager struct {
 	mutex         *sync.RWMutex
 	storage       *Storage.Storage
 	tokenDuration TokenDuration
-	channelId     int32
+	channelId     string
 }
 
 // New 創建一個新的 WSS 管理器實例。
@@ -43,7 +43,7 @@ type Manager struct {
 // 返回值:
 //
 //	(*Manager, error): 初始化的 Manager 實例和錯誤信息（如果有）。
-func New(storage *Storage.Storage, connMap *ConnMap.ConnMap, tokenDuration TokenDuration, channelId int32) (*Manager, error) {
+func New(storage *Storage.Storage, connMap *ConnMap.ConnMap, tokenDuration TokenDuration, channelId string) (*Manager, error) {
 	wss := &Manager{
 		connMap:       connMap,
 		mutex:         new(sync.RWMutex),

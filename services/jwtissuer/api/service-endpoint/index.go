@@ -9,9 +9,8 @@ import (
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
 	Auth "peergrine/utils/auth"
-	Kafka "peergrine/utils/kafka"
+	Pulsar "peergrine/utils/pulsar"
 
-	"github.com/IBM/sarama"
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 )
@@ -35,14 +34,13 @@ func (s *App) VerifyAccessToken(ctx context.Context, req *ServiceAuth.AccessToke
 
 	iat, _ := (*claims)["iat"].(float64)
 	exp, _ := (*claims)["exp"].(float64)
-	channelId, _ := (*claims)["channel_id"].(float64)
 
 	res := ServiceAuth.TokenResponse{
 		Iss:       (*claims)["iss"].(string),
 		Iat:       int64(iat),
 		Exp:       int64(exp),
 		UserId:    (*claims)["user_id"].(string),
-		ChannelId: int32(channelId),
+		ChannelId: (*claims)["channel_id"].(string),
 	}
 
 	return &res, nil
@@ -50,7 +48,7 @@ func (s *App) VerifyAccessToken(ctx context.Context, req *ServiceAuth.AccessToke
 
 func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageRequest) (*ServiceAuth.SendMessageResponse, error) {
 
-	if s.kafkaChannelId == req.ChannelId {
+	if s.config.Id == req.ChannelId {
 		conn, ok := s.connMap.Get(req.ClientId)
 		if ok {
 			err := conn.WriteMessage(websocket.TextMessage, req.Message)
@@ -62,7 +60,7 @@ func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageReque
 	} else {
 		message, _ := json.Marshal(req)
 
-		_, _, err := s.kafka.SendMessage(s.config.KafkaTopic, message, req.ChannelId)
+		_, err := s.pulsar.SendMessage(req.ChannelId, message)
 		if err != nil {
 			return nil, err
 		}
@@ -75,30 +73,33 @@ func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageReque
 
 type App struct {
 	ServiceAuth.UnimplementedServiceAuthServer
-	server         *grpc.Server
-	config         *AppConfig.AppConfig
-	storage        *Storage.Storage
-	connMap        *ConnMap.ConnMap
-	kafka          *Kafka.Client
-	kafkaChannelId int32
+	server             *grpc.Server
+	config             *AppConfig.AppConfig
+	storage            *Storage.Storage
+	connMap            *ConnMap.ConnMap
+	pulsar             *Pulsar.Client
+	stopListenMessages context.CancelFunc
 }
 
-func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap, kafka *Kafka.Client, kafkaChannelId int32) *App {
+func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap, pulsar *Pulsar.Client) *App {
 	server := grpc.NewServer()
 
 	app := &App{
-		server:         server,
-		config:         config,
-		storage:        storage,
-		connMap:        connMap,
-		kafka:          kafka,
-		kafkaChannelId: kafkaChannelId,
+		server:  server,
+		config:  config,
+		storage: storage,
+		connMap: connMap,
+		pulsar:  pulsar,
 	}
 
 	ServiceAuth.RegisterServiceAuthServer(server, app)
 
-	if kafka != nil {
-		go app.listenKafkerMessage()
+	if pulsar != nil {
+
+		ctx, cancel := context.WithCancel(context.Background())
+		app.stopListenMessages = cancel
+		go app.listenPulsarMessage(ctx)
+
 	}
 
 	return app
@@ -114,18 +115,16 @@ func (e *App) Run(addr string) error {
 }
 
 func (e *App) Close() {
+	if e.stopListenMessages != nil {
+		e.stopListenMessages()
+	}
 	e.storage.Close()
 	e.server.Stop()
 }
 
-func (app *App) listenKafkerMessage() {
-	handler := make(chan []byte)
-	done := make(chan interface{})
+func (app *App) listenPulsarMessage(ctx context.Context) {
 
-	app.kafka.ConsumeMessages(app.config.KafkaTopic, app.kafkaChannelId, sarama.OffsetNewest, handler, done)
-
-	for {
-		msg := <-handler
+	for msg := range app.pulsar.ListenMessages(ctx, 10) {
 
 		var req ServiceAuth.SendMessageRequest
 		err := json.Unmarshal(msg, &req)
@@ -138,6 +137,6 @@ func (app *App) listenKafkerMessage() {
 			}
 
 		}
-		done <- nil
+
 	}
 }

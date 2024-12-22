@@ -74,11 +74,11 @@ func getPlayload(c *gin.Context) (*Auth.TokenPayload, error) {
 	return &tokenPayload, nil
 }
 
-func (app *Server) getChannelId(payload *Auth.TokenPayload) (unifiedMessage bool, channelId int32) {
+func (app *Server) getChannelId(payload *Auth.TokenPayload) (unifiedMessage bool, channelId string) {
 	if app.config.UnifiedMessage {
 		return true, payload.ChannelId
 	}
-	return false, app.kafkaChannelId
+	return false, app.config.Id
 }
 
 func (app *Server) postPublicKey(c *gin.Context) {
@@ -231,11 +231,10 @@ func (app *Server) getClient(c *gin.Context) {
 			Message:   messageBytes,
 		}
 
-		if app.kafka != nil {
+		if app.pulsar != nil {
 
 			requestBytes, _ := json.Marshal(request)
-
-			_, _, err := app.kafka.SendMessage(app.config.KafkaTopic, requestBytes, target.ChannelId)
+			_, err := app.pulsar.SendMessage(target.ChannelId, requestBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return
@@ -269,21 +268,21 @@ func (app *Server) getClient(c *gin.Context) {
 		messageChannel := app.messageChannels.Get(targetId)
 		if messageChannel != nil {
 			messageChannel <- sessionBytes
-		} else if app.kafka != nil {
+		} else if app.pulsar != nil {
 			channelId, err := app.storage.GetClientChannel(targetId)
 			if err != nil {
 				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
 				return
 			}
 
-			kafkaMessage := ForawrdMessage{
+			pulsarMessage := ForawrdMessage{
 				ClientId: targetId,
 				Content:  sessionBytes,
 			}
 
-			kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
+			pulsarMessageBytes, _ := json.Marshal(pulsarMessage)
 
-			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
+			_, err = app.pulsar.SendMessage(channelId, pulsarMessageBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
 				return
@@ -336,12 +335,12 @@ func (app *Server) postMessage(c *gin.Context) {
 		messageBytes, _ := json.Marshal(message)
 
 		request := &ServiceAuth.SendMessageRequest{
-			ChannelId: 0,
+			ChannelId: "",
 			ClientId:  targetId,
 			Message:   messageBytes,
 		}
 
-		if app.kafka != nil {
+		if app.pulsar != nil {
 			channelId, err := app.storage.GetClientChannel(targetId)
 			if err != nil {
 				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
@@ -352,7 +351,7 @@ func (app *Server) postMessage(c *gin.Context) {
 
 			requestBytes, _ := json.Marshal(request)
 
-			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, requestBytes, channelId)
+			_, err = app.pulsar.SendMessage(channelId, requestBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return
@@ -379,7 +378,7 @@ func (app *Server) postMessage(c *gin.Context) {
 		messageChannel := app.messageChannels.Get(targetId)
 		if messageChannel != nil {
 			messageChannel <- messageBytes
-		} else if app.kafka != nil {
+		} else if app.pulsar != nil {
 
 			channelId, err := app.storage.GetClientChannel(targetId)
 			if err != nil {
@@ -387,14 +386,14 @@ func (app *Server) postMessage(c *gin.Context) {
 				return
 			}
 
-			kafkaMessage := ForawrdMessage{
+			pulsarMessage := ForawrdMessage{
 				ClientId: targetId,
 				Content:  messageBytes,
 			}
 
-			kafkaMessageBytes, _ := json.Marshal(kafkaMessage)
+			pulsarMessageBytes, _ := json.Marshal(pulsarMessage)
 
-			_, _, err = app.kafka.SendMessage(app.config.KafkaTopic, kafkaMessageBytes, channelId)
+			_, err = app.pulsar.SendMessage(channelId, pulsarMessageBytes)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, fmt.Sprintf("Failed to send message via Kafka for target ID: %s. Error: %v", targetId, err))
 				return

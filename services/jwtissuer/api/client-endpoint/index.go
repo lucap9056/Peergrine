@@ -23,7 +23,7 @@ type ClientEndpoint struct {
 	server        *gin.Engine
 	storage       *Storage.Storage
 	tokenDuration AuthLifecycle.TokenDuration
-	channelId     int32
+	channelId     string
 }
 
 func AtoD(str string) (time.Duration, error) {
@@ -45,7 +45,7 @@ func AtoD(str string) (time.Duration, error) {
 // 返回值:
 //
 //	*API: 初始化的 API 實例。
-func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap, channelId int32) (*ClientEndpoint, error) {
+func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap.ConnMap) (*ClientEndpoint, error) {
 
 	bearerTokenDuration, err := AtoD(config.BearerTokenDuration)
 	if err != nil {
@@ -68,10 +68,10 @@ func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap
 		server:        server,
 		storage:       storage,
 		tokenDuration: tokenDuration,
-		channelId:     channelId,
+		channelId:     config.Id,
 	}
 
-	authLifecycle, err := AuthLifecycle.New(storage, connMap, tokenDuration, channelId)
+	authLifecycle, err := AuthLifecycle.New(storage, connMap, tokenDuration, config.Id)
 	if err != nil {
 		return nil, err
 	}

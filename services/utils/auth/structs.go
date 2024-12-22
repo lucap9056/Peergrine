@@ -6,7 +6,7 @@ type TokenPayload struct {
 	Iat       int64  `json:"iat"`
 	Exp       int64  `json:"exp"`
 	UserId    string `json:"user_id"`
-	ChannelId int32  `json:"channel_id"`
+	ChannelId string `json:"channel_id"`
 }
 
 func (t *TokenPayload) SetToken(token string) {

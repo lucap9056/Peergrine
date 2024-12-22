@@ -10,10 +10,9 @@ import (
 	Storage "peergrine/msg-bridge/storage"
 	Auth "peergrine/utils/auth"
 	GenericChannels "peergrine/utils/generic-channels"
-	Kafka "peergrine/utils/kafka"
+	Pulsar "peergrine/utils/pulsar"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,26 +25,25 @@ const (
 )
 
 type Server struct {
-	config          *AppConfig.AppConfig
-	storage         *Storage.Storage
-	authConnection  *grpc.ClientConn
-	authClient      ServiceAuth.ServiceAuthClient
-	messageChannels GenericChannels.Channels[[]byte]
-	kafka           *Kafka.Client
-	kafkaChannelId  int32
-	server          *http.Server
+	config             *AppConfig.AppConfig
+	storage            *Storage.Storage
+	authConnection     *grpc.ClientConn
+	authClient         ServiceAuth.ServiceAuthClient
+	messageChannels    GenericChannels.Channels[[]byte]
+	pulsar             *Pulsar.Client
+	server             *http.Server
+	stopListenMessages context.CancelFunc
 }
 
 // New creates and initializes a new Server instance with configuration, storage, and Kafka client.
 // It also sets up the gRPC authentication client if the auth service address is provided.
-func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Client, kafkaChannelId int32) (*Server, error) {
+func New(config *AppConfig.AppConfig, storage *Storage.Storage, pulsar *Pulsar.Client) (*Server, error) {
 
 	app := &Server{
 		config:          config,
 		storage:         storage,
 		messageChannels: GenericChannels.New[[]byte](),
-		kafka:           kafka,
-		kafkaChannelId:  kafkaChannelId,
+		pulsar:          pulsar,
 	}
 
 	if config.AuthAddr != "" {
@@ -58,8 +56,12 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, kafka *Kafka.Cli
 		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if kafka != nil && !config.UnifiedMessage {
-		go app.listenKafkerMessage()
+	if pulsar != nil && !config.UnifiedMessage {
+
+		ctx, cancel := context.WithCancel(context.Background())
+		app.stopListenMessages = cancel
+		go app.listenPulsarMessages(ctx)
+
 	}
 
 	router := gin.Default()
@@ -89,6 +91,9 @@ func (app *Server) Run() error {
 
 // Close gracefully closes the gRPC connection and any other resources associated with the server.
 func (app *Server) Close() {
+	if app.stopListenMessages != nil {
+		app.stopListenMessages()
+	}
 	app.messageChannels.Close()
 	if app.authConnection != nil {
 		app.authConnection.Close()
@@ -96,14 +101,9 @@ func (app *Server) Close() {
 	}
 }
 
-func (app *Server) listenKafkerMessage() {
-	handler := make(chan []byte)
-	done := make(chan interface{})
+func (app *Server) listenPulsarMessages(ctx context.Context) {
 
-	app.kafka.ConsumeMessages(app.config.KafkaTopic, app.kafkaChannelId, sarama.OffsetNewest, handler, done)
-
-	for {
-		msg := <-handler
+	for msg := range app.pulsar.ListenMessages(ctx, 10) {
 
 		var message ForawrdMessage
 		err := json.Unmarshal(msg, &message)
@@ -116,8 +116,9 @@ func (app *Server) listenKafkerMessage() {
 			}
 
 		}
-		done <- nil
+
 	}
+
 }
 
 // Error handles errors by logging internal server errors and sending appropriate HTTP responses.

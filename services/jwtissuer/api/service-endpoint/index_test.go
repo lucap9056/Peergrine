@@ -23,9 +23,10 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 	currentTime := time.Now()
 	Iat := currentTime.Unix()
 	Exp := currentTime.Add(time.Minute * 1).Unix()
+	channeId := "0"
 
 	// 生成測試 token
-	token, err := Auth.GenerateBearerToken(Iss, UserId, 0, secret, Iat, Exp)
+	token, err := Auth.GenerateBearerToken(Iss, UserId, channeId, secret, Iat, Exp)
 	if err != nil {
 		t.Fatalf("failed to generate bearer token: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 
 	connMap := ConnMap.New()
 	// 創建測試 server
-	server := New(storage, config, connMap, nil, 0)
+	server := New(storage, config, connMap, nil)
 
 	// 啟動 server 在一個獨立的 goroutine 中
 	go func() {
@@ -75,4 +76,5 @@ func TestVerifyAccessTokenWithServer(t *testing.T) {
 	assert.Equal(t, Iat, res.Iat, "unexpected issued at time")
 	assert.Equal(t, Exp, res.Exp, "unexpected expiration time")
 	assert.Equal(t, UserId, res.UserId, "unexpected user id")
+	assert.Equal(t, channeId, res.ChannelId, "unexpected channel id")
 }

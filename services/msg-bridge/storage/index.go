@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/binary"
 	"fmt"
 	GenericStorage "peergrine/utils/generic-storage"
 )
@@ -14,7 +13,7 @@ const (
 type ClientSession struct {
 	LinkCode     string
 	ClientId     string
-	ChannelId    int32
+	ChannelId    string
 	SessionBytes []byte
 	ExpiresAt    int64
 }
@@ -31,7 +30,7 @@ type Storage struct {
 	*GenericStorage.Storage[ClientSession]
 }
 
-func New(channelId int32, redisAddr string) (*Storage, error) {
+func New(channelId string, redisAddr string) (*Storage, error) {
 	s, err := GenericStorage.New[ClientSession](channelId, redisAddr)
 
 	if err != nil {
@@ -97,14 +96,13 @@ func (s *Storage) RemoveClientSession(linkCode string) error {
 	return nil
 }
 
-func (s *Storage) SetClientChannel(clientId string, channelId int32) error {
+func (s *Storage) SetClientChannel(clientId string, channelId string) error {
 
 	if s.Redis != nil {
 
 		key := REDIS_PREFIX_CLIENT_CHANNEL + clientId
 
-		content := make([]byte, 4)
-		binary.BigEndian.PutUint32(content, uint32(channelId))
+		content := []byte(channelId)
 		err := s.Redis.Set(key, content, 0)
 		if err != nil {
 			return err
@@ -115,7 +113,7 @@ func (s *Storage) SetClientChannel(clientId string, channelId int32) error {
 	return nil
 }
 
-func (s *Storage) GetClientChannel(clientId string) (int32, error) {
+func (s *Storage) GetClientChannel(clientId string) (string, error) {
 
 	if s.Redis != nil {
 
@@ -123,14 +121,13 @@ func (s *Storage) GetClientChannel(clientId string) (int32, error) {
 
 		content, err := s.Redis.Get(key)
 		if err != nil {
-			return -1, fmt.Errorf("failed to retrieve client channel for client ID: %s", clientId)
+			return "", fmt.Errorf("failed to retrieve client channel for client ID: %s", clientId)
 		}
 
-		channelId := binary.BigEndian.Uint32(content)
-		return int32(channelId), nil
+		return string(content), nil
 	}
 
-	return -1, fmt.Errorf("client channel not found for client ID: %s", clientId)
+	return "", fmt.Errorf("client channel not found for client ID: %s", clientId)
 }
 
 func (s Storage) RemoveClientChannel(clientId string) error {

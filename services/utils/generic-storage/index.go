@@ -15,7 +15,7 @@ type base interface {
 // Storage manages both local in-memory storage and Redis-based storage.
 // It handles caching of tokens and secrets in a thread-safe manner.
 type Storage[T base] struct {
-	ChannelId int32
+	ChannelId string
 	Redis     *Redis.Manager
 	Local     *LocalStorageManager[T]
 	SecretMux *sync.RWMutex
@@ -24,7 +24,7 @@ type Storage[T base] struct {
 
 // New creates and returns a new instance of Storage.
 // It initializes the Redis manager if a Redis address is provided.
-func New[T base](channelId int32, redisAddr string) (*Storage[T], error) {
+func New[T base](channelId string, redisAddr string) (*Storage[T], error) {
 	manager := &Storage[T]{
 		ChannelId: channelId,
 		SecretMux: new(sync.RWMutex),

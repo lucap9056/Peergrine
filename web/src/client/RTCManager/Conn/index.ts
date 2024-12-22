@@ -91,7 +91,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
 
                 setTimeout(() => {
 
-                    const signal: Signal = { client_id: clientId, channel_id: 0, sdp, candidates };
+                    const signal: Signal = { client_id: clientId, channel_id: "", sdp, candidates };
                     this.emit("SignalChanged", { detail: signal });
 
                 }, 1000);

@@ -21,12 +21,12 @@ spec:
         - containerPort: 50051
           name: service-grpc
         env:
-        - name: APP_ZOOKEEPER_ADDRS
-          value: zookeeper:2181
         - name: APP_REDIS_ADDR
           value: redis:6379
-        - name: APP_CONSUL_ADDR
-          value: consul:8500
+        - name: APP_PULSAR_ADDRS
+          value: pulsar://pulsar:6650
+        - name: APP_PULSAR_TOPIC
+          value: UnifiedMessage
         - name: APP_ID
           valueFrom:
             fieldRef:

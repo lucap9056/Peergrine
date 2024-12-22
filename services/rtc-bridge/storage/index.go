@@ -14,7 +14,7 @@ type Signal struct {
 	LinkCode    string
 	ClientId    string
 	SignalBytes []byte
-	ChannelId   int32
+	ChannelId   string
 	ExpiresAt   int64
 }
 
@@ -44,8 +44,8 @@ func (s *Signal) SetLinkCode(linkCode string) {
 
 // SetChannelId sets the ChannelId for the Signal.
 // Parameters:
-//   - channelId (int32): The channel identifier to assign to the signal.
-func (s *Signal) SetChannelId(channelId int32) {
+//   - channelId (string): The channel identifier to assign to the signal.
+func (s *Signal) SetChannelId(channelId string) {
 	s.ChannelId = channelId
 }
 
@@ -70,12 +70,12 @@ type Storage struct {
 
 // New creates a new instance of the Storage to manage signals.
 // Parameters:
-//   - channelId (int32): The ID of the communication channel.
+//   - channelId (string): The ID of the communication channel.
 //   - redisAddr (string): The address of the Redis server (optional).
 //
 // Returns:
 //   - *Storage: A new Storage instance or an error if Redis initialization fails.
-func New(channelId int32, redisAddr string) (*Storage, error) {
+func New(channelId string, redisAddr string) (*Storage, error) {
 	s, err := GenericStorage.New[Signal](channelId, redisAddr)
 	if err != nil {
 		return nil, err

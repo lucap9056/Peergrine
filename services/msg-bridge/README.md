@@ -1,8 +1,6 @@
 # Peergrine MsgBridge Service
 
-The **MsgBridge** service is responsible for forwarding messages between clients. It relies on **Kafker** and **Kafka** for horizontal scaling and uses **Redis** for caching and authentication when required. Configuration can be managed through environment variables, command-line arguments, or Zookeeper.
-
-This high-performance messaging bridge integrates seamlessly with Kafka, Redis, and other services to provide efficient message forwarding.
+The **MsgBridge** service is responsible for forwarding messages between clients. It relies on **Pulsar** for horizontal scaling and uses **Redis** for caching and authentication when required. Configuration can be managed through environment variables, command-line arguments, or Zookeeper.
 
 ---
 
@@ -17,21 +15,16 @@ MsgBridge service settings can be loaded from:
 
 ## Configuration Options
 
-| **Setting Field**         | **Description**                                     | **Default Value** |
+|**SettingField**|**Description**|**DefaultValue**|
 |-|-|-|
-| `APP_ID`                  | Unique identifier for the service (optional)        | Randomly generated |
-| `APP_ADDR`                | Address where the service runs                      | `:80`             |
-| `APP_AUTH_ADDR`           | Address for authentication service                  | Empty             |
-| `APP_REDIS_ADDR`          | Address of the Redis server                         | Empty             |
-| `APP_KAFKA_ADDR`          | Address of the Kafka server                         | Empty             |
-| `APP_KAFKER_ADDR`         | Address of the Kafker service                       | Empty             |
-| `APP_CONSUL_ADDR`         | Address of the Consul service                       | Empty             |
-| `APP_SERVICE_NAME`        | Name of the service                                 | `MsgBridge`       |
-| `APP_SERVICE_ADDR`        | Service address (optional)                          | Determined by service |
-| `APP_SERVICE_PORT`        | Port for health checks                              | `4000`            |
+|`APP_ID`| Unique service identifier (optional | Randomly generated |
+|`APP_ADDR`|Address where the service runs (optional) | `:80` |
+|`APP_AUTH_ADDR`|Address for authentication service | None |
+|`APP_REDIS_ADDR` |Redis server address (optional) |None (no Redis used) |
+|`APP_PULSAR_ADDRS` |List of Pulsar broker addresses (optional, comma-separated) |None |
+|`APP_PULSAR_TOPIC` |Pulsar topic name for communication (optional) |None |
 
 > **Notes:**
-> - If `APP_CONSUL_ADDR` is not set, `APP_SERVICE_NAME`, `APP_SERVICE_ADDR`, and `APP_SERVICE_PORT` will not be used.
 > - If `APP_AUTH_ADDR` is empty but `APP_REDIS_ADDR` is set, the service will attempt to handle authentication independently.
 
 ---
@@ -44,14 +37,6 @@ Zookeeper provides centralized management of MsgBridge settings. If Zookeeper ad
 
 - **Default Path**: `/msg-bridge`  
 - Override the default path using the `CONFIG_PATH` environment variable or command-line arguments.
-
----
-
-### Configuration Workflow
-
-1. **Zookeeper**: The service attempts to load settings from the specified Zookeeper path. If the path does not exist, it initializes with default settings and saves them to Zookeeper.
-2. **Environment Variables**: Settings like `APP_ADDR` or `APP_KAFKA_ADDR` can be specified via environment variables.
-3. **Command-Line Arguments**: Settings can also be passed via command-line arguments, such as `-zookeeper-addrs`.
 
 ---
 
@@ -69,8 +54,8 @@ If the specified configuration path in Zookeeper does not exist, MsgBridge will 
 export APP_ADDR=":8080"
 export APP_AUTH_ADDR="auth-service:5000"
 export APP_REDIS_ADDR="redis:6379"
-export APP_KAFKA_ADDR="kafka:9092"
-export APP_KAFKER_ADDR="kafker:50051"
+export APP_PULSAR_ADDRS="pulsar://pulsar-broker-0:6650,pulsar://pulsar-broker-1:6650"
+export APP_PULSAR_TOPIC="MsgBridge"
 export APP_ZOOKEEPER_ADDRS="zookeeper1:2181,zookeeper2:2181"
 export CONFIG_PATH="/msg-bridge"
 ```
@@ -86,10 +71,8 @@ export CONFIG_PATH="/msg-bridge"
 ## Integration
 
 MsgBridge integrates with:
-- **Kafka**: For high-performance message queuing and delivery.
+- **Pulsar**: For high-performance horizontal message delivery.
 - **Redis**: For caching and optional independent authentication.
-- **Kafker**: To manage Kafka partition assignments.
-- **Zookeeper**: For centralized configuration management.
-- **Consul**: For service registration and discovery (optional).
+- **Zookeeper**: For centralized configuration management (optional).
 
 This setup ensures that MsgBridge is both scalable and reliable for handling real-time message forwarding in distributed systems.

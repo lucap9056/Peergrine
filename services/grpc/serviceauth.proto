@@ -18,11 +18,11 @@ message TokenResponse {
   int64 iat = 2;
   int64 exp = 3;
   string user_id = 4;
-  int32 channel_id = 5;
+  string channel_id = 5;
 }
 
 message SendMessageRequest {
-  int32 channel_id = 1;
+  string channel_id = 1;
   string client_id = 2;
   bytes message = 3;
 }

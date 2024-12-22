@@ -1,4 +1,4 @@
-# Peergrine Kafker Service
+# Peergrine Kafker Service (Deprecated)
 
 
 The **Kafker** service is dedicated to managing Kafka partition assignments and depends on both Kafka and Zookeeper. It uses Zookeeper for configuration management and service registration.
