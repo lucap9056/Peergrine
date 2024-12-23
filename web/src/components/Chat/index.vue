@@ -1,5 +1,6 @@
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted, ref } from 'vue';
+import { defineComponent, onMounted, onUnmounted, ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
 
 import Client, { Channel, User } from '@Src/client';
 import ClientProfile from "@Src/client/ClientProfile";
@@ -9,6 +10,7 @@ import ChatMessage from '@Src/storage/message';
 import Message from "@Components/Message/index.vue";
 import FileManager from "@Src/storage/files";
 import Chat, { ChatEvent } from "./";
+import { ROUTE_PATHS } from '@Src/router';
 
 export default defineComponent({
     components: {
@@ -29,10 +31,11 @@ export default defineComponent({
         },
     },
     setup: ({ client, chat, fileManager }) => {
-
+        const route = useRoute();
         const clientProfile = ref<ClientProfile>(client.Profile);
         const channel = ref<Channel>();
         const messages = ref<ChatMessage[]>([]);
+        const routed = computed(() => route.fullPath === ROUTE_PATHS.NONE);
 
         const ChannelChangedHandler = (e: ChatEvent<"ChannelChanged">) => {
             channel.value = e.detail;
@@ -50,7 +53,7 @@ export default defineComponent({
             chat.on("ChannelChanged", ChannelChangedHandler);
             chat.on("MessagesUpdated", MessagesChangedHandler);
             chat.on("MessageAppended", MessageAppendedHandler);
-        })
+        });
 
         onUnmounted(() => {
             chat.off("ChannelChanged", ChannelChangedHandler);
@@ -124,6 +127,7 @@ export default defineComponent({
             channel,
             messages,
             fileManager,
+            routed,
             HandlePasteContent,
             HandleInputContent,
             HandleSelectFile,
@@ -136,7 +140,7 @@ export default defineComponent({
 </script>
 
 <template>
-    <div class="chat_container">
+    <div class="chat_container" :data-routed="routed">
 
         <template v-if="channel !== undefined && client !== undefined">
             <div class="chat_header">
@@ -179,7 +183,6 @@ export default defineComponent({
     flex-flow: column;
     flex: 1;
 
-
     .chat_header {
         display: flex;
         flex-flow: row;
@@ -194,7 +197,6 @@ export default defineComponent({
         }
 
     }
-
 
     .chat {
         margin: 8px;
@@ -237,6 +239,8 @@ export default defineComponent({
             display: flex;
             flex-flow: row;
             padding: 0 10px;
+            width: 75vw;
+            margin: 0 auto;
 
             &[data-visible="false"] {
                 display: none;
@@ -251,11 +255,11 @@ export default defineComponent({
                 background: transparent;
                 text-align: left;
                 overflow-x: hidden;
-                overflow-wrap: break-word;
-                word-wrap: break-word;
                 box-sizing: border-box;
                 outline: none;
                 color: #3c260e;
+                white-space: pre-wrap;
+                word-wrap: break-word;
             }
 
             .chat_input_file {
@@ -275,5 +279,25 @@ export default defineComponent({
             }
         }
     }
+}
+
+@media (max-width: 767px) {
+    .chat_container {
+        max-width: calc(100% - 54px);
+        margin: unset;
+        border-radius: unset;
+
+        &[data-routed="false"] {
+            display: none;
+        }
+
+        .chat {
+            .chat_input_container {
+                width: unset;
+                margin: unset;
+            }
+        }
+    }
+
 }
 </style>

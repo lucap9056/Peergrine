@@ -96,9 +96,15 @@ export default defineComponent({
     padding: 3px 10px;
 
     .chat_message_text {
-        padding: 0 20px;
+        padding: 0 10px;
         background-color: #824c37;
         border-radius: 5px;
+        display: inline-block;
+        word-wrap: break-word;
+        word-break: break-word;
+        white-space: pre-wrap;
+        text-align: left;
+        line-height: 32px;
     }
 
     .chat_message_file {

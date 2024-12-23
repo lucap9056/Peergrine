@@ -13,7 +13,7 @@ interface StorageFileChunk extends FileChunk {
 
 class DBChatStorage {
     public static ForceUpdateOnNext = () => {
-        document.cookie = "indexedDBRebuild=true; path=/";
+        document.cookie = "indexedDBRebuild=true; SameSite=Strict; path=/";
     }
 
     public static readonly NAME = "IndexedDB";
@@ -50,7 +50,7 @@ class DBChatStorage {
             const storage = new DBChatStorage(clientId);
 
             const forceUpdate = document.cookie.includes("indexedDBRebuild=true");
-            document.cookie = "indexedDBRebuild=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            document.cookie = "indexedDBRebuild=; SameSite=Strict; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
             storage.InitDatabase(forceUpdate).then(() => {
                 resolve(storage);
