@@ -52,12 +52,12 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
 
     private state: State = Conn.STATUS.INITIAL;
 
-    constructor(clientId: string, clientName: string = "") {
+    constructor(config: RTCConfiguration, clientId: string, clientName: string = "") {
         super();
         this.clientId = clientId;
         this.clientName = clientName;
 
-        const conn = new RTCPeerConnection();
+        const conn = new RTCPeerConnection(config);
 
         conn.addEventListener("iceconnectionstatechange", () => {
             if (conn.iceConnectionState === "disconnected") {

@@ -44,6 +44,8 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
         }
     }, 1000);
 
+    private config: RTCConfiguration = {};
+
     constructor(client: ClientProfile, signaling: Signaling) {
         super();
         this.client = client;
@@ -92,13 +94,13 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
     public async Offer(): Promise<void> {
         const { ClientId, ClientName } = this.client;
-        const { api } = this;
+        const { api, config } = this;
 
         if (!api) {
             throw new Error("Signaling API instance is unavailable. Ensure that the signaling service is initialized.");
         }
 
-        const user = new Conn(ClientId, ClientName);
+        const user = new Conn(config, ClientId, ClientName);
         const connId = user.ConnId;
 
         user.on("Ready", (e) => {
@@ -144,7 +146,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
     public async Answer(linkCode: string): Promise<Conn> {
         const { ClientId, ClientName } = this.client;
-        const { api } = this;
+        const { api, config } = this;
 
         return new Promise(async (resolve, reject) => {
 
@@ -154,7 +156,7 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
             const targetSignal = await api.GetSignal(linkCode);
 
-            const user = new Conn(ClientId, ClientName);
+            const user = new Conn(config, ClientId, ClientName);
 
             user.on("Ready", (e) => {
                 this.emit("UserAppended", e);
@@ -251,6 +253,10 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
         const message = ReceivedMessage.New(messageId);
         user.Send(Conn.CHANNELS.MESSAGE, message);
+    }
+
+    public SetIceServers(servers: RTCIceServer[] = []): void {
+        this.config.iceServers = servers;
     }
 
     public Close(): void {
