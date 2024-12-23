@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package unifiedmessage;
+
+option go_package = "/unifiedmessage";
+
+service UnifiedMessage {
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+}
+
+message SendMessageRequest {
+  string channel_id = 1;
+  string client_id = 2;
+  bytes message = 3;
+}
+
+message SendMessageResponse {
+  bool success = 1;
+  string message = 2;
+}

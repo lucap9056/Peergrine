@@ -54,12 +54,14 @@ func main() {
 	var pulsar *Pulsar.Client
 
 	if config.PulsarAddrs != "" {
+		log.Println("Initializing pulsar client...")
 		pulsar, err = Pulsar.New(config.PulsarAddrs, config.PulsarTopic, config.Id)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 		defer pulsar.Close()
+		log.Println("pulsar initialized.")
 	}
 
 	connMap := ConnMap.New()

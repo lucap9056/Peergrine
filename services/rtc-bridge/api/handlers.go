@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
-	ServiceAuth "peergrine/grpc/serviceauth"
+	ServiceUnifiedMessage "peergrine/grpc/unifiedmessage"
 	AuthMessage "peergrine/jwtissuer/client-messages"
 	Storage "peergrine/rtc-bridge/storage"
 	Auth "peergrine/utils/auth"
@@ -70,7 +70,7 @@ func getPlayload(c *gin.Context) (*Auth.TokenPayload, error) {
 }
 
 func (app *API) getChannelId(payload *Auth.TokenPayload) (bool, string) {
-	if app.config.UnifiedMessage {
+	if app.unifiedMessageConnection != nil {
 		return true, payload.ChannelId
 	}
 	return false, app.config.Id
@@ -216,7 +216,7 @@ func (app *API) forwardSignal(c *gin.Context) {
 		return
 	}
 
-	if app.config.UnifiedMessage {
+	if app.unifiedMessageConnection != nil {
 
 		message := &AuthMessage.Message[SignalData]{
 			Type:    MESSAGE_TYPE,
@@ -225,7 +225,7 @@ func (app *API) forwardSignal(c *gin.Context) {
 
 		messageBytes, _ := json.Marshal(message)
 
-		request := &ServiceAuth.SendMessageRequest{
+		request := &ServiceUnifiedMessage.SendMessageRequest{
 			ChannelId: targetSignal.ChannelId,
 			ClientId:  targetSignal.ClientId,
 			Message:   messageBytes,
@@ -244,7 +244,7 @@ func (app *API) forwardSignal(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 			defer cancel()
 
-			_, err := app.authClient.SendMessage(ctx, request)
+			_, err := app.unifiedMessageClient.SendMessage(ctx, request)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return

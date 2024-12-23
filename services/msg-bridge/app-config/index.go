@@ -10,24 +10,23 @@ import (
 )
 
 const (
-	_DEFAULT_ADDRESS           = ":80"
-	_DEFAULT_AUTHORIZE_ADDRESS = "" // auth:50051
-	_DEFAULT_REDIS_ADDRESS     = "" // redis:6379
-	_DEFAULT_PULSAR_ADDRESSES  = "" // pulsar://pulsar-broker:6650
-	_DEFAULT_PULSAR_TOPIC      = "MsgBridge"
-	_DEFAULT_UNIFIED_MESSAGE   = "false"
-	_DEFAULT_ZK_CONFIG_PATH    = "/msg-bridge"
+	_DEFAULT_ADDRESS              = ":80"
+	_DEFAULT_AUTHORIZE_ADDRESS    = "" // auth:50051
+	_DEFAULT_REDIS_ADDRESS        = "" // redis:6379
+	_DEFAULT_PULSAR_ADDRESSES     = "" // pulsar://pulsar-broker:6650
+	_DEFAULT_PULSAR_TOPIC         = "MsgBridge"
+	_DEFAULT_UNIFIED_MESSAGE_ADDR = ""
+	_DEFAULT_ZK_CONFIG_PATH       = "/msg-bridge"
 )
 
 type AppConfig struct {
-	Id                string `json:"-" config:"APP_ID"`
-	Addr              string `json:"address" config:"APP_ADDR"`
-	AuthAddr          string `json:"auth_address" config:"APP_AUTH_ADDR"`
-	RedisAddr         string `json:"redis_address" config:"APP_REDIS_ADDR"`
-	PulsarAddrs       string `json:"pulsar_addresses" config:"APP_PULSAR_ADDRS"`
-	PulsarTopic       string `json:"pulsar_topic" config:"APP_PULSAR_TOPIC"`
-	UnifiedMessageStr string `json:"unified_message" config:"APP_UNIFIED_MESSAGE"`
-	UnifiedMessage    bool   `json:"-"`
+	Id                 string `json:"-" config:"APP_ID"`
+	Addr               string `json:"address" config:"APP_ADDR"`
+	AuthAddr           string `json:"auth_address" config:"APP_AUTH_ADDR"`
+	RedisAddr          string `json:"redis_address" config:"APP_REDIS_ADDR"`
+	PulsarAddrs        string `json:"pulsar_addresses" config:"APP_PULSAR_ADDRS"`
+	PulsarTopic        string `json:"pulsar_topic" config:"APP_PULSAR_TOPIC"`
+	UnifiedMessageAddr string `json:"unified_message_address" config:"APP_UNIFIED_MESSAGE_ADDR"`
 }
 
 func Init() (*AppConfig, error) {
@@ -49,12 +48,12 @@ func Init() (*AppConfig, error) {
 	)
 
 	appConfig := &AppConfig{
-		Addr:              _DEFAULT_ADDRESS,
-		AuthAddr:          _DEFAULT_AUTHORIZE_ADDRESS,
-		RedisAddr:         _DEFAULT_REDIS_ADDRESS,
-		PulsarAddrs:       _DEFAULT_PULSAR_ADDRESSES,
-		PulsarTopic:       _DEFAULT_PULSAR_TOPIC,
-		UnifiedMessageStr: _DEFAULT_UNIFIED_MESSAGE,
+		Addr:               _DEFAULT_ADDRESS,
+		AuthAddr:           _DEFAULT_AUTHORIZE_ADDRESS,
+		RedisAddr:          _DEFAULT_REDIS_ADDRESS,
+		PulsarAddrs:        _DEFAULT_PULSAR_ADDRESSES,
+		PulsarTopic:        _DEFAULT_PULSAR_TOPIC,
+		UnifiedMessageAddr: _DEFAULT_UNIFIED_MESSAGE_ADDR,
 	}
 
 	log.Println("Reading environment configuration values...")
@@ -90,8 +89,6 @@ func Init() (*AppConfig, error) {
 	if appConfig.Id == "" {
 		appConfig.Id = "MsgBridge-" + uuid.New().String()
 	}
-
-	appConfig.UnifiedMessage = appConfig.UnifiedMessageStr == "true"
 
 	log.Println("Configuration initialization complete.")
 	return appConfig, nil

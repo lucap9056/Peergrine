@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	ServiceAuth "peergrine/grpc/serviceauth"
+	ServiceUnifiedMessage "peergrine/grpc/unifiedmessage"
 	AppConfig "peergrine/msg-bridge/app-config"
 	Storage "peergrine/msg-bridge/storage"
 	Auth "peergrine/utils/auth"
@@ -25,14 +26,16 @@ const (
 )
 
 type Server struct {
-	config             *AppConfig.AppConfig
-	storage            *Storage.Storage
-	authConnection     *grpc.ClientConn
-	authClient         ServiceAuth.ServiceAuthClient
-	messageChannels    GenericChannels.Channels[[]byte]
-	pulsar             *Pulsar.Client
-	server             *http.Server
-	stopListenMessages context.CancelFunc
+	config                   *AppConfig.AppConfig
+	storage                  *Storage.Storage
+	authConnection           *grpc.ClientConn
+	authClient               ServiceAuth.ServiceAuthClient
+	unifiedMessageConnection *grpc.ClientConn
+	unifiedMessageClient     ServiceUnifiedMessage.UnifiedMessageClient
+	messageChannels          GenericChannels.Channels[[]byte]
+	pulsar                   *Pulsar.Client
+	server                   *http.Server
+	stopListenMessages       context.CancelFunc
 }
 
 // New creates and initializes a new Server instance with configuration, storage, and Kafka client.
@@ -56,7 +59,28 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, pulsar *Pulsar.C
 		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if pulsar != nil && !config.UnifiedMessage {
+	if config.UnifiedMessageAddr != "" {
+
+		if config.UnifiedMessageAddr == config.AuthAddr && app.authConnection != nil {
+
+			app.unifiedMessageConnection = app.authConnection
+			app.unifiedMessageClient = ServiceUnifiedMessage.NewUnifiedMessageClient(app.authConnection)
+
+		} else {
+
+			conn, err := grpc.NewClient(config.UnifiedMessageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return nil, err
+			}
+
+			app.unifiedMessageConnection = conn
+			app.unifiedMessageClient = ServiceUnifiedMessage.NewUnifiedMessageClient(conn)
+
+		}
+
+	}
+
+	if pulsar != nil {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		app.stopListenMessages = cancel
@@ -95,10 +119,16 @@ func (app *Server) Close() {
 		app.stopListenMessages()
 	}
 	app.messageChannels.Close()
+
 	if app.authConnection != nil {
 		app.authConnection.Close()
-		app.storage.Close()
 	}
+
+	if app.unifiedMessageConnection != nil && app.unifiedMessageConnection != app.authConnection {
+		app.unifiedMessageConnection.Close()
+	}
+
+	app.storage.Close()
 }
 
 func (app *Server) listenPulsarMessages(ctx context.Context) {

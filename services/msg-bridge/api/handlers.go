@@ -9,7 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	ServiceAuth "peergrine/grpc/serviceauth"
+	ServiceUnifiedMessage "peergrine/grpc/unifiedmessage"
 	AuthMessage "peergrine/jwtissuer/client-messages"
 	Storage "peergrine/msg-bridge/storage"
 	Auth "peergrine/utils/auth"
@@ -75,7 +75,7 @@ func getPlayload(c *gin.Context) (*Auth.TokenPayload, error) {
 }
 
 func (app *Server) getChannelId(payload *Auth.TokenPayload) (unifiedMessage bool, channelId string) {
-	if app.config.UnifiedMessage {
+	if app.unifiedMessageConnection != nil {
 		return true, payload.ChannelId
 	}
 	return false, app.config.Id
@@ -216,7 +216,7 @@ func (app *Server) getClient(c *gin.Context) {
 		PublicKey: string(bodyBytes),
 	}
 
-	if app.config.UnifiedMessage {
+	if app.unifiedMessageConnection != nil {
 
 		mesage := AuthMessage.Message[SessionData]{
 			Type:    MESSAGE_TYPE,
@@ -225,7 +225,7 @@ func (app *Server) getClient(c *gin.Context) {
 
 		messageBytes, _ := json.Marshal(mesage)
 
-		request := &ServiceAuth.SendMessageRequest{
+		request := &ServiceUnifiedMessage.SendMessageRequest{
 			ChannelId: target.ChannelId,
 			ClientId:  targetId,
 			Message:   messageBytes,
@@ -245,7 +245,7 @@ func (app *Server) getClient(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 			defer cancel()
 
-			_, err := app.authClient.SendMessage(ctx, request)
+			_, err := app.unifiedMessageClient.SendMessage(ctx, request)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return
@@ -325,7 +325,7 @@ func (app *Server) postMessage(c *gin.Context) {
 		return
 	}
 
-	if app.config.UnifiedMessage {
+	if app.unifiedMessageConnection != nil {
 
 		message := AuthMessage.Message[MessageData]{
 			Type:    MESSAGE_TYPE,
@@ -334,20 +334,19 @@ func (app *Server) postMessage(c *gin.Context) {
 
 		messageBytes, _ := json.Marshal(message)
 
-		request := &ServiceAuth.SendMessageRequest{
-			ChannelId: "",
+		channelId, err := app.storage.GetClientChannel(targetId)
+		if err != nil {
+			Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
+			return
+		}
+
+		request := &ServiceUnifiedMessage.SendMessageRequest{
+			ChannelId: channelId,
 			ClientId:  targetId,
 			Message:   messageBytes,
 		}
 
 		if app.pulsar != nil {
-			channelId, err := app.storage.GetClientChannel(targetId)
-			if err != nil {
-				Error(c, http.StatusNotFound, fmt.Sprintf("Client channel not found for target ID: %s. Error: %v", targetId, err))
-				return
-			}
-
-			request.ChannelId = channelId
 
 			requestBytes, _ := json.Marshal(request)
 
@@ -362,7 +361,7 @@ func (app *Server) postMessage(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 			defer cancel()
 
-			_, err := app.authClient.SendMessage(ctx, request)
+			_, err := app.unifiedMessageClient.SendMessage(ctx, request)
 			if err != nil {
 				Error(c, http.StatusInternalServerError, err)
 				return

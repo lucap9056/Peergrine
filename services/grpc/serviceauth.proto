@@ -6,7 +6,6 @@ option go_package = "/serviceauth";
 
 service ServiceAuth {
   rpc VerifyAccessToken(AccessTokenRequest) returns (TokenResponse);
-  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
 }
 
 message AccessTokenRequest {
@@ -19,15 +18,4 @@ message TokenResponse {
   int64 exp = 3;
   string user_id = 4;
   string channel_id = 5;
-}
-
-message SendMessageRequest {
-  string channel_id = 1;
-  string client_id = 2;
-  bytes message = 3;
-}
-
-message SendMessageResponse {
-  bool success = 1;
-  string message = 2;
 }

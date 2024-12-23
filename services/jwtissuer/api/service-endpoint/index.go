@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	ServiceAuth "peergrine/grpc/serviceauth"
+	ServiceUnifiedMessage "peergrine/grpc/unifiedmessage"
 	ConnMap "peergrine/jwtissuer/api/conn-map"
 	AppConfig "peergrine/jwtissuer/app-config"
 	Storage "peergrine/jwtissuer/storage"
@@ -46,7 +47,7 @@ func (s *App) VerifyAccessToken(ctx context.Context, req *ServiceAuth.AccessToke
 	return &res, nil
 }
 
-func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageRequest) (*ServiceAuth.SendMessageResponse, error) {
+func (s *App) SendMessage(ctx context.Context, req *ServiceUnifiedMessage.SendMessageRequest) (*ServiceUnifiedMessage.SendMessageResponse, error) {
 
 	if s.config.Id == req.ChannelId {
 		conn, ok := s.connMap.Get(req.ClientId)
@@ -57,22 +58,25 @@ func (s *App) SendMessage(ctx context.Context, req *ServiceAuth.SendMessageReque
 			}
 
 		}
-	} else {
+	} else if s.pulsar != nil {
+
 		message, _ := json.Marshal(req)
 
 		_, err := s.pulsar.SendMessage(req.ChannelId, message)
 		if err != nil {
 			return nil, err
 		}
+
 	}
 
-	return &ServiceAuth.SendMessageResponse{
+	return &ServiceUnifiedMessage.SendMessageResponse{
 		Success: true,
 	}, nil
 }
 
 type App struct {
 	ServiceAuth.UnimplementedServiceAuthServer
+	ServiceUnifiedMessage.UnifiedMessageServer
 	server             *grpc.Server
 	config             *AppConfig.AppConfig
 	storage            *Storage.Storage
@@ -93,6 +97,7 @@ func New(storage *Storage.Storage, config *AppConfig.AppConfig, connMap *ConnMap
 	}
 
 	ServiceAuth.RegisterServiceAuthServer(server, app)
+	ServiceUnifiedMessage.RegisterUnifiedMessageServer(server, app)
 
 	if pulsar != nil {
 
@@ -126,7 +131,7 @@ func (app *App) listenPulsarMessage(ctx context.Context) {
 
 	for msg := range app.pulsar.ListenMessages(ctx, 10) {
 
-		var req ServiceAuth.SendMessageRequest
+		var req ServiceUnifiedMessage.SendMessageRequest
 		err := json.Unmarshal(msg, &req)
 		if err == nil {
 			clientId := req.ClientId

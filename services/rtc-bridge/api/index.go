@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	ServiceAuth "peergrine/grpc/serviceauth"
+	ServiceUnifiedMessage "peergrine/grpc/unifiedmessage"
 	AppConfig "peergrine/rtc-bridge/app-config"
 	Storage "peergrine/rtc-bridge/storage"
 	Auth "peergrine/utils/auth"
@@ -25,14 +26,16 @@ const (
 )
 
 type API struct {
-	config             *AppConfig.AppConfig
-	storage            *Storage.Storage
-	authConnection     *grpc.ClientConn
-	authClient         ServiceAuth.ServiceAuthClient
-	signalChannels     GenericChannels.Channels[SignalData]
-	pulsar             *Pulsar.Client
-	server             *http.Server
-	stopListenMessages context.CancelFunc
+	config                   *AppConfig.AppConfig
+	storage                  *Storage.Storage
+	authConnection           *grpc.ClientConn
+	authClient               ServiceAuth.ServiceAuthClient
+	unifiedMessageConnection *grpc.ClientConn
+	unifiedMessageClient     ServiceUnifiedMessage.UnifiedMessageClient
+	signalChannels           GenericChannels.Channels[SignalData]
+	pulsar                   *Pulsar.Client
+	server                   *http.Server
+	stopListenMessages       context.CancelFunc
 }
 
 // New 創建新的 API 實例並設置相關的路由和中介軟體
@@ -51,12 +54,31 @@ func New(config *AppConfig.AppConfig, storage *Storage.Storage, pulsar *Pulsar.C
 		if err != nil {
 			return nil, err
 		}
-
 		app.authConnection = conn
 		app.authClient = ServiceAuth.NewServiceAuthClient(conn)
 	}
 
-	if pulsar != nil && !config.UnifiedMessage {
+	if config.UnifiedMessageAddr != "" {
+
+		if config.UnifiedMessageAddr == config.AuthAddr && app.authConnection != nil {
+
+			app.unifiedMessageConnection = app.authConnection
+			app.unifiedMessageClient = ServiceUnifiedMessage.NewUnifiedMessageClient(app.authConnection)
+
+		} else {
+
+			conn, err := grpc.NewClient(config.UnifiedMessageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return nil, err
+			}
+			app.unifiedMessageConnection = conn
+			app.unifiedMessageClient = ServiceUnifiedMessage.NewUnifiedMessageClient(conn)
+
+		}
+
+	}
+
+	if pulsar != nil {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		app.stopListenMessages = cancel
@@ -91,10 +113,16 @@ func (app *API) Close() {
 		app.stopListenMessages()
 	}
 	app.signalChannels.Close()
+
 	if app.authConnection != nil {
 		app.authConnection.Close()
-		app.storage.Close()
 	}
+
+	if app.unifiedMessageConnection != nil && app.unifiedMessageConnection != app.authConnection {
+		app.unifiedMessageConnection.Close()
+	}
+
+	app.storage.Close()
 }
 
 func (app *API) listenPulsarMessages(ctx context.Context) {
