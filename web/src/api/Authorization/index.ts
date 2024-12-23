@@ -19,6 +19,7 @@ type RefreshToken = {
 type EventDefinitions = {
     "MessageReceived": { detail: Message<any> }
     "AuthorizationStateChanged": { detail: Payload };
+    "ConnectionClosed": {};
     "ErrorOccurred": { detail: { message: string, error: Error } };
 };
 export type AuthorizationEvent<T extends keyof EventDefinitions> = EventDefinitions[T];
@@ -65,12 +66,13 @@ export default class Authorization extends BaseEventSystem<EventDefinitions> {
             this.ProcessAuthorization(message.content);
             return;
         }
-        
+
         this.emit("MessageReceived", { detail: originalMessage });
     }
 
     private WebSocketCloseHandler() {
         console.log("WebSocket connection closed.");
+        this.emit("ConnectionClosed", {});
     }
 
     private WebSocketErrorHandler() {
