@@ -6,15 +6,15 @@
     }
 
     handle_path /api/token/* {
-        reverse_proxy jwtissuer
+        reverse_proxy {$JWTISSUER_ADDRESS}
     }
 
     handle_path /api/signal/* {
-        reverse_proxy rtc-bridge
+        reverse_proxy {$SIGNALING_ADDRESS}
     }
 
     handle_path /api/message/* {
-        reverse_proxy msg-bridge
+        reverse_proxy {$MESSAGE_RELAY_ADDRESS}
     }
 
     root * /usr/share/caddy
