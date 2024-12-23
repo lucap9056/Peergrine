@@ -93,7 +93,7 @@ export default class Signaling extends BaseEventSystem<EventDefinitions> {
 
                 const resultStr = decoder.decode(value);
                 const result = JSON.parse(resultStr);
-                
+
                 if (result.link_code) {
                     resolve(result);
                 }
@@ -115,25 +115,29 @@ export default class Signaling extends BaseEventSystem<EventDefinitions> {
     public async GetSignal(linkCode: string): Promise<Signal> {
         const { auth } = this;
 
-        try {
-            const res = await fetch(`${Signaling.SIGNAL_WITH_LINKCODE_URL}${linkCode}`, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${auth.AccessToken}`,
-                },
-            });
+        return new Promise(async (resolve, reject) => {
+            try {
+                const res = await fetch(`${Signaling.SIGNAL_WITH_LINKCODE_URL}${linkCode}`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${auth.AccessToken}`,
+                    },
+                });
 
-            if (!res.ok) {
-                throw new Error(`Failed to fetch signal: ${res.status}`);
+                if (!res.ok) {
+                    reject(new Error(`Failed to fetch signal: ${res.status}`));
+                    return;
+                }
+
+                const signal: Signal = await res.json();
+                resolve(signal);
+            } catch (error) {
+                console.error("Error while getting signal:", error);
+                reject(error as Error);
             }
+        });
 
-            const signal: Signal = await res.json();
-            return signal;
-        } catch (error) {
-            console.error("Error while getting signal:", error);
-            throw error;
-        }
     }
 
     /**
