@@ -99,12 +99,12 @@ class Notification {
     }
 
     public set Manager(manager: NotificationManager) {
-        this.Manager = manager;
+        this.manager = manager;
     }
 
     public Remove(): void {
         if (!this.manager) return;
-        this.Manager.RemoveNotification(this.notificationId);
+        this.manager.RemoveNotification(this.notificationId);
     }
 }
 
@@ -122,13 +122,6 @@ class NotificationManager extends BaseEventSystem<ManagerEventDefinitions> {
 
         let autoRemoveDelay = 0;
         switch (notification.Type) {
-            case Notification.TYPE.ALERT: {
-                if (!notification.HasButtons) {
-                    const Button = new NotificationButton("");
-                    notification.AddButton(Button);
-                }
-                break;
-            }
             case Notification.TYPE.NORMAL: {
                 autoRemoveDelay = 3000;
                 break;

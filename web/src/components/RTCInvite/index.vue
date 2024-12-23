@@ -6,7 +6,7 @@ import Client from '@Src/client';
 import { RTCEvent } from "@Src/client/RTCManager";
 
 import { Loading, loadingManager } from "@Components/Loading";
-import notificationManager, { Notification } from '../Notifications';
+import notificationManager, { Notification } from "@Components/Notifications";
 
 // QRCode class used for generating QR codes
 declare class QRCode {

@@ -9,10 +9,11 @@ import NotificationsComponent from "@Components/Notifications/index.vue";
 import FileViewerComponent from "@Components/FileViewer/index.vue";
 import LoadingComponent from "@Components/Loading/index.vue";
 
-import { loadingManager } from "@Components/Loading";
+import { loadingManager, Loading } from "@Components/Loading";
 import FileManager from "@Src/storage/files";
 import Client from "@Src/client";
 import Chat from "@Components/Chat";
+import notificationManager, { Notification } from '@Components/Notifications';
 
 export default defineComponent({
     components: {
@@ -27,10 +28,14 @@ export default defineComponent({
         const client = ref<Client>();
         const fileManager = ref<FileManager>();
         const chat = ref<Chat>();
+        const connected = ref<boolean>(false);
 
         onMounted(() => {
 
-            const loading = loadingManager.Add();
+            let loading: Loading | undefined = loadingManager.Add();
+
+            let notification: Notification | undefined = new Notification(Notification.TYPE.ALERT, "Connection is being initialized...");
+            notificationManager.AddNotification(notification);
 
             const c = new Client();
 
@@ -39,13 +44,39 @@ export default defineComponent({
                     const name = e.detail.user_id.substring(0, 8);
                     c.Profile.UpdateClientName(name);
                 }
-                loading.Remove();
+
+                if (loading) {
+                    loading.Remove();
+                    loading = undefined;
+                }
+
+                if (notification) {
+                    notification.Remove();
+                    notification = undefined;
+                }
+
                 const f = new FileManager(c);
                 const ch = new Chat(c, f);
 
                 client.value = c;
                 fileManager.value = f;
                 chat.value = ch;
+                connected.value = true;
+            });
+
+            c.Authorization.on("ConnectionClosed", () => {
+                connected.value = false;
+
+                if (loading === undefined) {
+                    loading = loadingManager.Add();
+                }
+
+                if (notification) {
+                    notification.Remove();
+                }
+
+                notification = new Notification(Notification.TYPE.ALERT, "Connection has been disconnected.");
+                notificationManager.AddNotification(notification);
             });
 
         });
@@ -60,13 +91,14 @@ export default defineComponent({
             client,
             fileManager,
             chat,
+            connected,
         };
     }
 });
 </script>
 
 <template>
-    <template v-if="client && fileManager && chat">
+    <template v-if="client && fileManager && chat && connected">
 
         <HeaderComponent :profile="client.Profile"></HeaderComponent>
 
