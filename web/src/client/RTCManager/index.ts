@@ -117,29 +117,32 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
             this.emit("ErrorOccurred", e);
         });
 
-        user.on("SignalChanged", async (e) => {
+        user.on("ConnStateChanged", (e) => {
+            if (e.detail.state === Conn.STATUS.OFFER_READY) {
+                const signal = user.Signal;
+                if (signal) {
+                    api.SetSignal(signal,
+                        (targetSignal) => {
+                            delete this.unconnectedOffers;
+                            user.SetConnectionTarget(targetSignal);
+                        }
+                    ).then((linkCode) => {
 
-            api.SetSignal(e.detail,
-                (signal) => {
-                    delete this.unconnectedOffers;
-                    user.SetConnectionTarget(signal);
+                        this.emit("OfferReady", {
+                            detail: {
+                                id: connId,
+                                linkCode
+                            }
+                        });
+                        this.linkCode = linkCode;
+
+                    }).catch((err) => {
+                        this.emit("ErrorOccurred", { detail: { conn: user, error: err as Error } });
+                    });
                 }
-            ).then((linkCode) => {
-
-                this.emit("OfferReady", {
-                    detail: {
-                        id: connId,
-                        linkCode
-                    }
-                });
-                this.linkCode = linkCode;
-
-            }).catch((err) => {
-                this.emit("ErrorOccurred", { detail: { conn: user, error: err as Error } });
-            });
-
-
+            }
         });
+
         await user.CreateOffer();
         this.unconnectedOffers = user;
     }
@@ -167,10 +170,24 @@ export default class RTCManager extends BaseEventSystem<EventDefinitions> {
 
             user.on("Close", (e) => this.emit("UserStatusChanged", e));
 
-            user.on("SignalChanged", (e) => {
-                const signal = e.detail;
+            user.on("ConnStateChanged", (e) => {
+                if (e.detail.state === Conn.STATUS.ANSWER_READY) {
+                    const signal = user.Signal;
 
-                api.ForwardSignal(linkCode, signal).catch(reject);
+                    if (signal) {
+                        api.ForwardSignal(linkCode, signal).then(() => {
+
+                            setTimeout(() => {
+                                if (!user.online) {
+                                    reject(new Error("connect fail."));
+                                }
+                            }, 5000);
+                        }).catch(reject);
+                    } else {
+                        reject(new Error("not found signal"));
+                    }
+
+                }
             });
 
             user.CreateAnswer(targetSignal);

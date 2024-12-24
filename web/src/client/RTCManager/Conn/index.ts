@@ -3,16 +3,7 @@ import ConnStateMessage, { UserInfoMessage } from "./stateMessage";
 import BaseEventSystem from "@Src/structs/eventSystem";
 import { Signal } from "@API/Signaling";
 
-type ConnEventDefinitions = {
-    "Ready": { detail: Conn };
-    "Close": { detail: Conn };
-    "ErrorOccurred": { detail: { conn: Conn, error: Error } };
-    "SignalChanged": { detail: Signal };
-    "UserStatusChanged": { detail: ConnStateMessage };
-    "MessageAppended": { detail: { user: Conn, message: Message } };
-}
 
-export type ConnEvent<T extends keyof ConnEventDefinitions> = ConnEventDefinitions[T];
 
 type DataType = {
     message: Message;
@@ -21,7 +12,7 @@ type DataType = {
 
 type Channels = { [channelName: string]: RTCDataChannel };
 
-type State = "INITIAL" | "OFFER_READY" | "ANSWER_READY" | "CONNECTING" | "CONNECTED" | "DISCONNECTED";
+type State = "INITIAL" | "OFFER_READY" | "ANSWER_READY" | "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "FAILED";
 
 interface Conn {
     targetId: string;
@@ -29,10 +20,21 @@ interface Conn {
     online: boolean;
 }
 
+type ConnEventDefinitions = {
+    "Ready": { detail: Conn };
+    "Close": { detail: Conn };
+    "ErrorOccurred": { detail: { conn: Conn, error: Error } };
+    "SignalChanged": { detail: Signal };
+    "UserStatusChanged": { detail: ConnStateMessage };
+    "ConnStateChanged": { detail: { state: State } };
+    "MessageAppended": { detail: { user: Conn, message: Message } };
+}
+
+export type ConnEvent<T extends keyof ConnEventDefinitions> = ConnEventDefinitions[T];
 class Conn extends BaseEventSystem<ConnEventDefinitions> {
-    public static CHANNELS = class {
-        public static MESSAGE: keyof DataType = "message";
-        public static STATE: keyof DataType = "state";
+    public static readonly CHANNELS = class {
+        public static readonly MESSAGE: keyof DataType = "message";
+        public static readonly STATE: keyof DataType = "state";
     }
 
     private clientId: string;
@@ -41,60 +43,80 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
     private conn: RTCPeerConnection;
     private channels: Channels = {};
 
-    public static STATUS = class {
-        public static INITIAL: State = "INITIAL";
-        public static OFFER_READY: State = "OFFER_READY";
-        public static ANSWER_READY: State = "ANSWER_READY";
-        public static CONNECTING: State = "CONNECTING";
-        public static CONNECTED: State = "CONNECTED";
-        public static DISCONNECTED: State = "DISCONNECTED";
+    public static readonly STATUS = class {
+        public static readonly INITIAL: State = "INITIAL";
+        public static readonly OFFER_READY: State = "OFFER_READY";
+        public static readonly ANSWER_READY: State = "ANSWER_READY";
+        public static readonly CONNECTING: State = "CONNECTING";
+        public static readonly CONNECTED: State = "CONNECTED";
+        public static readonly DISCONNECTED: State = "DISCONNECTED";
+        public static readonly FAILED: State = "FAILED";
     }
 
     private state: State = Conn.STATUS.INITIAL;
+    private signal?: Signal;
 
-    constructor(config: RTCConfiguration, clientId: string, clientName: string = "") {
+    constructor(config: RTCConfiguration, client_id: string, client_name: string = "") {
         super();
-        this.clientId = clientId;
-        this.clientName = clientName;
+        this.clientId = client_id;
+        this.clientName = client_name;
+        this.online = false;
 
         const conn = new RTCPeerConnection(config);
 
+        const candidates: RTCIceCandidate[] = [];
+
         conn.addEventListener("iceconnectionstatechange", () => {
-            if (conn.iceConnectionState === "disconnected") {
-                this.Close();
-                this.state = Conn.STATUS.DISCONNECTED;
+
+            switch (conn.iceConnectionState) {
+                case "disconnected": {
+                    this.Close();
+                    break;
+                }
+                case "failed": {
+                    this.SetState(Conn.STATUS.FAILED);
+                    break;
+                }
             }
         });
 
-        conn.addEventListener("signalingstatechange", () => {
+        conn.addEventListener("signalingstatechange", async () => {
 
+            switch (conn.signalingState) {
+                case "have-local-offer": {
+
+                    if (conn.localDescription) {
+
+                        const { clientId } = this;
+
+                        const sdp = conn.localDescription.sdp;
+                        this.signal = { client_id: clientId, channel_id: "", sdp, candidates };
+                        this.SetState(Conn.STATUS.OFFER_READY);
+                    }
+                    break;
+                }
+                case "have-remote-offer": {
+                    const answer = await conn.createAnswer();
+                    await conn.setLocalDescription(answer);
+
+                    if (conn.localDescription) {
+                        const sdp = conn.localDescription.sdp;
+                        this.signal = { client_id, channel_id: "", sdp, candidates };
+                        this.SetState(Conn.STATUS.ANSWER_READY);
+                    }
+
+                    break;
+                }
+            }
         });
 
         conn.addEventListener("datachannel", (e) => {
             this.Channel(e.channel);
         });
 
-        const candidates: RTCIceCandidate[] = [];
         conn.addEventListener("icecandidate", (e) => {
             if (e.candidate) {
                 candidates.push(e.candidate);
-            } else if (conn.localDescription) {
-
-                const { clientId, state } = this;
-                const sdp = conn.localDescription.sdp;
-
-                if (state !== Conn.STATUS.ANSWER_READY && state !== Conn.STATUS.OFFER_READY) {
-                    return;
-                }
-
-                this.state = Conn.STATUS.CONNECTING;
-
-                setTimeout(() => {
-
-                    const signal: Signal = { client_id: clientId, channel_id: "", sdp, candidates };
-                    this.emit("SignalChanged", { detail: signal });
-
-                }, 1000);
             }
         });
 
@@ -150,7 +172,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
         switch (status.type) {
             case "USER_INFO":
                 this.targetName = status.data.user_name;
-                this.state = Conn.STATUS.CONNECTED;
+                this.SetState(Conn.STATUS.CONNECTED);
                 this.emit("Ready", { detail: this });
                 break;
             case "CHANGE_USER_NAME":
@@ -173,20 +195,19 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
         const offer = await conn.createOffer();
         await conn.setLocalDescription(offer);
 
-        this.state = Conn.STATUS.OFFER_READY;
     }
 
     public async SetConnectionTarget({ client_id, sdp, candidates }: Signal) {
         this.targetId = client_id;
 
-        const description = new RTCSessionDescription({ type: "answer", sdp: decodeURIComponent(sdp) });
+        const description = new RTCSessionDescription({ type: "answer", sdp });
         await this.conn.setRemoteDescription(description);
 
         for (const icecandidate of candidates) {
             await this.conn.addIceCandidate(icecandidate);
         }
 
-        this.state = Conn.STATUS.CONNECTING;
+        this.SetState(Conn.STATUS.CONNECTING);
     }
 
     public async CreateAnswer({ client_id, sdp, candidates }: Signal) {
@@ -194,25 +215,27 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
 
         this.targetId = client_id;
 
-        try {
-            const description = new RTCSessionDescription({ type: "offer", sdp: decodeURIComponent(sdp) });
-            await conn.setRemoteDescription(description);
+        const description = new RTCSessionDescription({ type: "offer", sdp });
+        await conn.setRemoteDescription(description);
 
-            for (const candidate of candidates) {
-                await conn.addIceCandidate(candidate);
-            }
-
-            const answer = await conn.createAnswer();
-            await conn.setLocalDescription(answer);
-        } catch (e: any) {
-            if (!(e instanceof Error)) {
-                e = new Error(e);
-            }
-            this.emit("ErrorOccurred", { detail: { conn: this, error: e } });
-            return;
+        for (const candidate of candidates) {
+            await conn.addIceCandidate(candidate);
         }
+    }
 
-        this.state = Conn.STATUS.ANSWER_READY;
+    public get Signal(): Signal | undefined {
+        return this.signal;
+    }
+
+    private SetState(state: State): void {
+        this.online = state === Conn.STATUS.CONNECTED;
+        this.state = state;
+
+        this.emit("ConnStateChanged", { detail: { state } });
+    }
+
+    public get State(): State {
+        return this.state;
     }
 
     public SetConnId(id: string): void {
@@ -225,7 +248,7 @@ class Conn extends BaseEventSystem<ConnEventDefinitions> {
 
     public Close() {
         this.conn.close();
-        this.state = Conn.STATUS.DISCONNECTED;
+        this.SetState(Conn.STATUS.DISCONNECTED);
         this.emit("Close", { detail: this });
     }
 }
