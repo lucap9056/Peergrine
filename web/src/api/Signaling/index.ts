@@ -39,7 +39,7 @@ export default class Signaling extends BaseEventSystem<EventDefinitions> {
         this.auth = authorization;
 
         authorization.on("MessageReceived", (e: AuthorizationEvent<"MessageReceived">) => {
-            if (e.detail.type !== "message-relay") return;
+            if (e.detail.type !== "signaling") return;
 
             const message: Message<Signal> = e.detail;
 
